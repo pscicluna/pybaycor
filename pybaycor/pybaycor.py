@@ -169,3 +169,100 @@ class RobustBayesianCorrelation(BayesianCorrelation):
 
             #and now we can put our observed values into a multivariate T distribution to complete the model
             vals = pm.MvStudentT('vals', nu = nu, mu=mu, chol=chol, observed=self.data)
+
+        print("mu shape: ",mu.dshape)
+        help(vals)
+        print("vals shape: ",vals.shape)
+
+
+class HierarchicalBayesianCorrelation(BayesianCorrelation):
+    def __init__(self, data, sigma, mu_prior=[0.0,1000.], sigma_prior=200.):
+
+        self.fitted=False
+        if np.any(sigma <=0.):
+            raise ValueError("Uncertainties must be positive real numbers!")
+        self.plot_trace_vars = ['mu', "chol_corr"]
+        if data is None:
+            raise ValueError("Either data must be given as input, or x and y")
+        else:
+            self.ndim = data.shape[1]
+            self.npoints = data.shape[0]
+            self.data = data
+            if data.shape != sigma.shape:
+                raise RuntimeError("data and sigma must have the same shape!")
+            self.sigma = sigma
+
+        self.model = pm.Model()
+        with self.model:
+            #we put weakly informative hyperpriors on the means and standard deviations of the multivariate normal distribution
+            mu = pm.Normal("mu", mu=mu_prior[0], sigma=mu_prior[1], shape=self.ndim)
+            sigma = pm.HalfCauchy.dist(sigma_prior)
+            #and a hyperprior on the covariance matrix which weakly penalises strong correlations
+            chol, corr, stds = pm.LKJCholeskyCov("chol", n=self.ndim, eta=2.0, sd_dist=sigma, compute_corr=True)
+            #the hyperprior gives us the Cholesky Decomposition of the covariance matrix, so for completeness we can calculate that determinisitically
+            cov = pm.Deterministic("cov", chol.dot(chol.T))
+
+            print("mu shape: ",mu.dshape)
+            print("chol shape: ",chol.shape)
+            print("chol size: ",chol.size)
+            #help(self.npoints)
+
+            #and now we can construct our multivariate normal to complete the prior
+            prior = pm.MvNormal('vals', mu=mu, chol=chol, shape=(self.npoints,self.ndim)) #, observed=self.data)
+            print(prior)
+            help(prior)
+            mu1s = prior[:,0]
+
+            #Finally, we need to define our data
+            for i in range(self.ndim):
+                pm.Normal("data_"+str(i), mu=prior[:,i], sigma = self.sigma[:,i], observed=self.data[:,i])
+
+            
+
+            
+class HierarchicalRobustBayesianCorrelation(BayesianCorrelation):
+    def __init__(self, data, sigma, mu_prior=[0.0,1000.], sigma_prior=200.):
+
+        self.fitted=False
+        if np.any(sigma <=0.):
+            raise ValueError("Uncertainties must be positive real numbers!")
+        self.plot_trace_vars = ['mu', "chol_corr"]
+        if data is None:
+            raise ValueError("Either data must be given as input, or x and y")
+        else:
+            self.ndim = data.shape[1]
+            self.npoints = data.shape[0]
+            self.data = data
+            if data.shape != sigma.shape:
+                raise RuntimeError("data and sigma must have the same shape!")
+            self.sigma = sigma
+
+        self.model = pm.Model()
+        with self.model:
+            #we put weakly informative hyperpriors on the means and standard deviations of the multivariate normal distribution
+            mu = pm.Normal("mu", mu=mu_prior[0], sigma=mu_prior[1], shape=self.ndim)
+            sigma = pm.HalfCauchy.dist(sigma_prior)
+            #and a hyperprior on the covariance matrix which weakly penalises strong correlations
+            chol, corr, stds = pm.LKJCholeskyCov("chol", n=self.ndim, eta=2.0, sd_dist=sigma, compute_corr=True)
+            #the hyperprior gives us the Cholesky Decomposition of the covariance matrix, so for completeness we can calculate that determinisitically
+            cov = pm.Deterministic("cov", chol.dot(chol.T))
+
+            nuMinusOne = pm.Exponential('nu-1', lam=1./29.)
+            nu = pm.Deterministic('nu', nuMinusOne + 1)
+
+            print("mu shape: ",mu.dshape)
+            print("chol shape: ",chol.shape)
+            print("chol size: ",chol.size)
+            #help(self.npoints)
+
+            #and now we can construct our multivariate normal to complete the prior
+            prior = pm.MvStudentT('vals', nu = nu, mu=mu, chol=chol, shape=(self.npoints,self.ndim)) #, observed=self.data)
+            print(prior)
+            help(prior)
+            mu1s = prior[:,0]
+
+            #Finally, we need to define our data
+            for i in range(self.ndim):
+                pm.Normal("data_"+str(i), mu=prior[:,i], sigma = self.sigma[:,i], observed=self.data[:,i])
+
+            
