@@ -53,10 +53,14 @@ class BayesianCorrelation():
             self.summary = az.summary(self.trace, var_names=["~chol"], round_to=2)
             #self.rho = [self.summary['hdi_3%'][chol_corr[1,0]],self.summary['mean'][chol_corr[1,0]],self.summary['hdi_97%'][chol_corr[1,0]]]
             print(self.summary)
+            return self.trace, self.summary
+
+        return self.trace
 
     def summarise(self):
         self.summary = az.summary(self.trace, var_names=["~chol"], round_to=2)
         print(self.summary)
+        return self-summary
         
 
     def plot_trace(self,plotfile=None, show=False):
