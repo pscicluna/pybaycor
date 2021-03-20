@@ -3,7 +3,11 @@
 """
 
 
-import pybaycor
+from . import pybaycor
+from .pybaycor import BayesianCorrelation
+from .pybaycor import RobustBayesianCorrelation
+from .pybaycor import HierarchicalBayesianCorrelation
+from .pybaycor import HierarchicalRobustBayesianCorrelation
 
-__version__ = 0.1.0
+__version__ = "0.1.0"
 __all__=["pybaycor"]

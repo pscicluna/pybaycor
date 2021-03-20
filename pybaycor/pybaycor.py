@@ -134,7 +134,6 @@ class BayesianCorrelation():
         elif plotfile is not None:
             plt.close()
         
-        #pass
 
 
 
@@ -174,10 +173,6 @@ class RobustBayesianCorrelation(BayesianCorrelation):
             #and now we can put our observed values into a multivariate T distribution to complete the model
             vals = pm.MvStudentT('vals', nu = nu, mu=mu, chol=chol, observed=self.data)
 
-        print("mu shape: ",mu.dshape)
-        help(vals)
-        print("vals shape: ",vals.shape)
-
 
 class HierarchicalBayesianCorrelation(BayesianCorrelation):
     def __init__(self, data, sigma, mu_prior=[0.0,1000.], sigma_prior=200.):
@@ -206,12 +201,7 @@ class HierarchicalBayesianCorrelation(BayesianCorrelation):
             #the hyperprior gives us the Cholesky Decomposition of the covariance matrix, so for completeness we can calculate that determinisitically
             cov = pm.Deterministic("cov", chol.dot(chol.T))
 
-            print("mu shape: ",mu.dshape)
-            print("chol shape: ",chol.shape)
-            print("chol size: ",chol.size)
-            #help(self.npoints)
-
-            #and now we can construct our multivariate normal to complete the prior
+            #and now we can construct our multivariate normals to complete the prior
             prior = pm.MvNormal('vals', mu=mu, chol=chol, shape=(self.npoints,self.ndim)) #, observed=self.data)
             print(prior)
             help(prior)
@@ -254,12 +244,7 @@ class HierarchicalRobustBayesianCorrelation(BayesianCorrelation):
             nuMinusOne = pm.Exponential('nu-1', lam=1./29.)
             nu = pm.Deterministic('nu', nuMinusOne + 1)
 
-            print("mu shape: ",mu.dshape)
-            print("chol shape: ",chol.shape)
-            print("chol size: ",chol.size)
-            #help(self.npoints)
-
-            #and now we can construct our multivariate normal to complete the prior
+            #and now we can construct our multivariate T-distribituions to complete the prior
             prior = pm.MvStudentT('vals', nu = nu, mu=mu, chol=chol, shape=(self.npoints,self.ndim)) #, observed=self.data)
             print(prior)
             help(prior)

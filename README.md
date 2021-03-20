@@ -6,7 +6,10 @@ Pybaycor ("Pie Baker") is package for estimating Bayesian correlation coefficien
 
 ## Installation:
 
-I'm working on adding pybaycor to PyPI so that you can easily install it with pip. First I need to learn how to use setuptools properly.
+Pybaycor can be installed with pip:
+
+    pip install pybaycor
+    
 
 ## Dependencies:
 
