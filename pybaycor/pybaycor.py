@@ -240,7 +240,7 @@ class RobustBayesianCorrelation(BayesianCorrelation):
             nuMinusOne = pm.Exponential('nu-1', lam=1./29.)
             nu = pm.Deterministic('nu', nuMinusOne + 1)
 
-            #and now we can put our observed values into a multivariate T distribution to complete the model
+            #and now we can put our observed values into a multivariate t distribution to complete the model
             vals = pm.MvStudentT('vals', nu = nu, mu=mu, chol=chol, observed=self.data)
 
 
@@ -429,7 +429,7 @@ class HierarchicalRobustBayesianCorrelation(HierarchicalBayesianCorrelation):
             nuMinusOne = pm.Exponential('nu-1', lam=1./29.)
             nu = pm.Deterministic('nu', nuMinusOne + 1)
 
-            #and now we can construct our multivariate T-distribituions to complete the prior
+            #and now we can construct our multivariate t distribituions to complete the prior
             prior = pm.MvStudentT('vals', nu = nu, mu=mu, chol=chol, shape=(self.npoints,self.ndim)) #, observed=self.data)
             #print(prior)
             #help(prior)
