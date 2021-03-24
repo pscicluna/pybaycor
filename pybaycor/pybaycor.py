@@ -292,7 +292,7 @@ class BayesianCorrelation():
             coords = {"chol_corr_dim_0":[0], "chol_corr_dim_1":[1]}
             #plot_vars.append("chol_corr[0,1]")
         else:
-            coords = {"chol_corr_dim_0":, "chol_corr_dim_1":}
+            coords = {"chol_corr_dim_0":[], "chol_corr_dim_1":[]}
             d0 = []
             d1 = []
             #raise NotImplementedError("Corner plots for data with more than 2 dimensions are not available yet!")
@@ -303,8 +303,8 @@ class BayesianCorrelation():
                     #print(i,j)
                     #chol_coords.append([i,j])#"chol_corr["+str(i)+","+str(j)+"]")
 
-            coords["chol_corr_dim_0"] = xr.DataArray(d0, , dims=['pointwise_sel'])
-            coords["chol_corr_dim_1"] = xr.DataArray(d1, , dims=['pointwise_sel'])
+            coords["chol_corr_dim_0"] = xr.DataArray(d0, dims=['pointwise_sel'])
+            coords["chol_corr_dim_1"] = xr.DataArray(d1, dims=['pointwise_sel'])
         #print(plot_vars)
         #coords = {"chol_corr":chol_coords}
         #print(coords)
