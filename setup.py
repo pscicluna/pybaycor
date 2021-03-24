@@ -35,10 +35,11 @@ setup(
     install_requires=['numpy',
                       'matplotlib',
                       'seaborn',
+                      'xarray',
                       'pymc3==3.10.0',
                       'arviz==0.11.0'
                       ],
-    python_requires=">=3.6", 
+    python_requires=">=3.7", 
 
     classifiers=[
         'Development Status :: 3 - Alpha',

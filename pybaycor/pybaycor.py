@@ -5,11 +5,74 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import matplotlib.gridspec as gs
 import arviz as az
-#from corner import corner
+import xarray as xr
 
 class BayesianCorrelation():
+    """ A class to infer Bayesian correlation coefficients for multidimensional data without uncertainties
 
+    Parameters
+    ----------
+    data : float, (n_points, n_dim) array_like
+        The multidimensional dataset to infer correlations on.
+        Either data OR both x & y should be passed as input.
+    x : float, (n_points) array_like
+        Array_like of x values (optional; only for 2-D datasets)
+    y : float, (n_points array_like
+        Array_like of y values (optional; only for 2-D datasets)
+    ndim : int, optional
+        The number of dimensions in the input data. 
+        If not given, it will be inferred from the data
+    mu_prior : length-2 or (2, ndim) iterable of floats, optional, default (0., 1000.)
+        The mean and standard deviation of the Gaussian prior on the multivariate Normal distribution
+    sigma_prior : scalar or (ndim) iterable of floats, optional, default 200.
+        The prior on the scale parameter (beta) of the half-Cauchy prior on the standard deviations of the multivariate Normal distribution
+
+    Attributes
+    ----------
+    None
+
+    Methods
+    --------
+    fit : Fit the data assuming they are drawn from a multivariate Normal distribution
+
+    summarise : summarise the results of the fit
+
+    plot_trace : plot the trace and marginal distributions of the trace
+
+    plot_data : plot the data overlaid with the ellipse described by the inferred correlated multivariate Normal
+
+    plot_corner : plot the 1D and 2D marginal distributions of the inferred parameters.
+
+    Examples
+    --------
+
+    Creating an instance is as simple as 
+
+    >>> import pybaycor as pbc
+    >>> bc = pbc.BayesianCorrelation(data=data)
+
+    Once you have created the instances, the fit is run with 
+
+    >>> bc.fit()
+
+    or you can modify the length of burn-in and number of steps with
+
+    >>> bc.fit(steps=2000, tune=2000)
+
+    Once you are happy with the fit, you can get a tabular summary with
+
+    >>> summary = bc.summarise()
+
+    and visual summaries with
+
+    >>> bc.plot_trace()
+    >>> bc.plot_corner()
+    >>> bc,plot_data()
+        
+    """
     def __init__(self,data=None, x=None, y=None, ndim = None, mu_prior=[0.0,1000.], sigma_prior=200.):
+        
+        
         #if ndim is None:
         self.fitted=False
         self.plot_trace_vars = ['mu', "chol_corr"]
@@ -45,6 +108,18 @@ class BayesianCorrelation():
 
 
     def fit(self,steps=1000, tune=1000, summarise=False):
+        """ Fit the model to infer the correlation coefficient
+
+        Parameters
+        ----------
+        steps : int, optional, default 1000
+            Number of MCMC steps per chain after burn-in
+        tune : int, optional, default 1000
+            Number of steps per chain for burn-in
+        summarise : bool, default False
+            Whether to produce the table summary (also available through summarise())
+
+        """
         with self.model:
             self.trace = pm.sample(
                 steps, tune=tune, target_accept=0.9, compute_convergence_checks=False,return_inferencedata=True
@@ -59,12 +134,28 @@ class BayesianCorrelation():
         return self.trace
 
     def summarise(self):
+        """ Summarise the results of the model
+
+        Parameters
+        ----------
+        None
+        """
         self.summary = az.summary(self.trace, var_names=["~chol"], round_to=2)
         print(self.summary)
         return self.summary
         
 
     def plot_trace(self,plotfile=None, show=False):
+        """ Plot the trace of the MCMC run along with the marginal distributions of a subset of parameters
+
+        Parameters
+        ----------
+        plotfile : str, optional
+            Name of a file to write the plot to
+        show : bool, optional, default False
+            Whether to show the plot window
+
+        """
         if not self.fitted:
             pass #raise an error here
         ax = az.plot_trace(
@@ -83,12 +174,22 @@ class BayesianCorrelation():
             plt.save(plotfile)
         if show:
             plt.show()
-        elif plotfile is not None:
-            plt.close()
+        #elif plotfile is not None:
+        #    plt.close()
         #should this also return the ax?
             
 
     def plot_data(self,plotfile=None, show=None):
+        """ Plot the input data overlaid with the ellipse described by the inferred correlated multivariate distribution
+
+        Parameters
+        ----------
+        plotfile : str, optional
+            Name of a file to write the plot to
+        show : bool, optional, default False
+            Whether to show the plot window
+
+        """
         #Currently only supports 2D correlations
         #if self.ndim != 2:
         #    raise NotImplementedError("This routine doesn't support plotting correlations in more than 2 dimensions yet!")
@@ -164,12 +265,22 @@ class BayesianCorrelation():
             raise TypeError("plotfile must be a string")
         if show:
             plt.show()
-        elif plotfile is not None:
-            plt.close()
+        #elif plotfile is not None:
+        #    plt.close()
 
 
     
     def plot_corner(self, point_estimate='mean',plotfile=None,show=True):
+        """ Plot the 1D and 2D marginal distributions of the inferred parameters
+
+        Parameters
+        ----------
+        plotfile : str, optional
+            Name of a file to write the plot to
+        show : bool, optional, default False
+            Whether to show the plot window
+
+        """
         #For consistency's sake I'm going to re-invent the wheel here, and manually create a grid of plots from arviz, rather than letting corner do the work. This is because I want to make sure specific entries are plotted in a specific order.
         
         plot_vars = self.plot_trace_vars#[:-1]
@@ -181,15 +292,22 @@ class BayesianCorrelation():
             coords = {"chol_corr_dim_0":[0], "chol_corr_dim_1":[1]}
             #plot_vars.append("chol_corr[0,1]")
         else:
-            raise NotImplementedError("Corner plots for data with more than 2 dimensions are not available yet!")
+            coords = {"chol_corr_dim_0":, "chol_corr_dim_1":}
+            d0 = []
+            d1 = []
+            #raise NotImplementedError("Corner plots for data with more than 2 dimensions are not available yet!")
             for i in range(self.ndim - 1):
                 for j in range(1,self.ndim - 1):
-                    print(i,j)
-                    chol_coords.append([i,j])#"chol_corr["+str(i)+","+str(j)+"]")
+                    d0.append(i)
+                    d1.append(j)
+                    #print(i,j)
+                    #chol_coords.append([i,j])#"chol_corr["+str(i)+","+str(j)+"]")
 
-        print(plot_vars)
+            coords["chol_corr_dim_0"] = xr.DataArray(d0, , dims=['pointwise_sel'])
+            coords["chol_corr_dim_1"] = xr.DataArray(d1, , dims=['pointwise_sel'])
+        #print(plot_vars)
         #coords = {"chol_corr":chol_coords}
-        print(coords)
+        #print(coords)
         #corner = gs.GridSpec(rows, cols, figure=fig
         az.plot_pair(self.trace,
                      var_names = plot_vars,
@@ -208,6 +326,68 @@ class BayesianCorrelation():
         
 
 class RobustBayesianCorrelation(BayesianCorrelation):
+    """ A class to infer robust Bayesian correlation coefficients for multidimensional data without uncertainties
+
+    Parameters
+    ----------
+    data : float, (n_points, n_dim) array_like
+        The multidimensional dataset to infer correlations on.
+        Either data OR both x & y should be passed as input.
+    x : float, (n_points) array_like
+        Array_like of x values (optional; only for 2-D datasets)
+    y : float, (n_points array_like
+        Array_like of y values (optional; only for 2-D datasets)
+    ndim : int, optional
+        The number of dimensions in the input data. 
+        If not given, it will be inferred from the data
+    mu_prior : length-2 or (2, ndim) iterable of floats, optional, default (0., 1000.)
+        The mean and standard deviation of the Gaussian prior on the multivariate t distribution
+    sigma_prior : scalar or (ndim) iterable of floats, optional, default 200.
+        The prior on the scale parameter (beta) of the half-Cauchy prior on the standard deviations of the multivariate t distribution
+
+    Attributes
+    ----------
+    None
+
+    Methods
+    --------
+    fit : Fit the data assuming they are drawn from a multivariate Normal distribution
+
+    summarise : summarise the results of the fit
+
+    plot_trace : plot the trace and marginal distributions of the trace
+
+    plot_data : plot the data overlaid with the ellipse described by the inferred correlated multivariate Normal
+
+    plot_corner : plot the 1D and 2D marginal distributions of the inferred parameters.
+
+    Examples
+    --------
+
+    Creating an instance is as simple as 
+
+    >>> import pybaycor as pbc
+    >>> bc = pbc.BayesianCorrelation(data=data)
+
+    Once you have created the instances, the fit is run with 
+
+    >>> bc.fit()
+
+    or you can modify the length of burn-in and number of steps with
+
+    >>> bc.fit(steps=2000, tune=2000)
+
+    Once you are happy with the fit, you can get a tabular summary with
+
+    >>> summary = bc.summarise()
+
+    and visual summaries with
+
+    >>> bc.plot_trace()
+    >>> bc.plot_corner()
+    >>> bc,plot_data()
+
+    """
     def __init__(self,data=None, x=None, y=None, ndim = None, mu_prior=[0.0,1000.], sigma_prior=200.):
         #if ndim is None:
         self.fitted=False
@@ -245,6 +425,62 @@ class RobustBayesianCorrelation(BayesianCorrelation):
 
 
 class HierarchicalBayesianCorrelation(BayesianCorrelation):
+    """A class to infer Bayesian correlation coefficients for uncertain multidimensional data
+
+    Parameters
+    ----------
+    data : float, (n_points, n_dim) array_like
+        The multidimensional dataset to infer correlations on.
+    sigma : float, (n_points, n_dim) array_like
+        The uncertainties of the multidimensional dataset to infer correlations on.
+    mu_prior : length-2 or (2, ndim) iterable of floats, optional, default (0., 1000.)
+        The mean and standard deviation of the Gaussian prior on the multivariate Normal distribution
+    sigma_prior : scalar or (ndim) iterable of floats, optional, default 200.
+        The prior on the scale parameter (beta) of the half-Cauchy prior on the standard deviations of the multivariate Normal distribution
+
+    Attributes
+    ----------
+    None
+
+    Methods
+    --------
+    fit : Fit the data assuming they are drawn from a multivariate Normal distribution
+
+    summarise : summarise the results of the fit
+
+    plot_trace : plot the trace and marginal distributions of the trace
+
+    plot_data : plot the data overlaid with the ellipse described by the inferred correlated multivariate Normal
+
+    plot_corner : plot the 1D and 2D marginal distributions of the inferred parameters.
+
+    Examples
+    --------
+
+    Creating an instance is as simple as 
+
+    >>> import pybaycor as pbc
+    >>> bc = pbc.BayesianCorrelation(data=data)
+
+    Once you have created the instances, the fit is run with 
+
+    >>> bc.fit()
+
+    or you can modify the length of burn-in and number of steps with
+
+    >>> bc.fit(steps=2000, tune=2000)
+
+    Once you are happy with the fit, you can get a tabular summary with
+
+    >>> summary = bc.summarise()
+
+    and visual summaries with
+
+    >>> bc.plot_trace()
+    >>> bc.plot_corner()
+    >>> bc,plot_data()
+
+    """
     def __init__(self, data, sigma, mu_prior=[0.0,1000.], sigma_prior=200.):
 
         self.fitted=False
@@ -286,6 +522,9 @@ class HierarchicalBayesianCorrelation(BayesianCorrelation):
             print(datavars)
 
     def data_summary(self, printout=True):
+        """
+
+        """
         #if self.summary is None:
         self.summary_data = az.summary(self.trace, var_names=["vals"], filter_vars="like", round_to=2)
         if printout:
@@ -295,11 +534,28 @@ class HierarchicalBayesianCorrelation(BayesianCorrelation):
 
 
     def model_summary(self):
+        """
+
+        """
         if self.summary is None:
             self.summary = az.summary(self.trace, var_names=["~chol","~vals"], round_to=2)
         pass
 
     def plot_data(self, plot_input=True, plot_fitted=True,plotfile=None, show=None):
+        """Plot the input data overlaid with the ellipse described by the inferred correlated multivariate distribution
+
+        Parameters
+        ----------
+        plot_input : bool, default True
+            Whether to plot the input data and their uncertainties
+        plot_fitted : bool, default True
+            Whether to plot the inferred data and their inferred uncertainties
+        plotfile : str, optional
+            Name of a file to write the plot to
+        show : bool, optional, default False
+            Whether to show the plot window
+
+        """
         if not self.fitted:
             raise RuntimeError("Please run fit() before attempting to plot the results")
 
@@ -346,7 +602,7 @@ class HierarchicalBayesianCorrelation(BayesianCorrelation):
             #plt.show()
 
         elif self.ndim > 2 and isinstance(int, self.ndim) and np.isfinite(self.ndim):
-            raise NotImplementedError("This routine doesn't support plotting correlations in more than 2 dimensions yet!")
+            #raise NotImplementedError("This routine doesn't support plotting correlations in more than 2 dimensions yet!")
             rows = self.ndim - 1
             cols = self.ndim - 1
             fig = plt.figure()
@@ -400,6 +656,61 @@ class HierarchicalBayesianCorrelation(BayesianCorrelation):
 
             
 class HierarchicalRobustBayesianCorrelation(HierarchicalBayesianCorrelation):
+    """A class to infer robust Bayesian correlation coefficients for uncertain multidimensional data
+
+    Parameters
+    ----------
+    data : float, (n_points, n_dim) array_like
+        The multidimensional dataset to infer correlations on.
+    sigma: float, (n_points, n_dim) array_like
+        The uncertainties of the multidimensional dataset to infer correlations on.
+    mu_prior : length-2 or (2, ndim) iterable of floats, optional, default (0., 1000.)
+        The mean and standard deviation of the Gaussian prior on the multivariate t distribution
+    sigma_prior : scalar or (ndim) iterable of floats, optional, default 200.
+        The prior on the scale parameter (beta) of the half-Cauchy prior on the standard deviations of the multivariate t distribution
+
+    Attributes
+    ----------
+    None
+
+    Methods
+    --------
+    fit : Fit the data assuming they are drawn from a multivariate Normal distribution
+
+    summarise : summarise the results of the fit
+
+    plot_trace : plot the trace and marginal distributions of the trace
+
+    plot_data : plot the data overlaid with the ellipse described by the inferred correlated multivariate Normal
+
+    plot_corner : plot the 1D and 2D marginal distributions of the inferred parameters.
+
+    Examples
+    --------
+
+    Creating an instance is as simple as 
+
+    >>> import pybaycor as pbc
+    >>> bc = pbc.BayesianCorrelation(data=data)
+
+    Once you have created the instances, the fit is run with 
+
+    >>> bc.fit()
+
+    or you can modify the length of burn-in and number of steps with
+
+    >>> bc.fit(steps=2000, tune=2000)
+
+    Once you are happy with the fit, you can get a tabular summary with
+
+    >>> summary = bc.summarise()
+
+    and visual summaries with
+
+    >>> bc.plot_trace()
+    >>> bc.plot_corner()
+    >>> bc,plot_data()
+    """
     def __init__(self, data, sigma, mu_prior=[0.0,1000.], sigma_prior=200.):
 
         self.fitted=False
