@@ -2,7 +2,7 @@
 <sub><sup>*It's all you knead*</sup></sub>
 ---
 
-Pybaycor ("Pie Baker") is package for estimating Bayesian correlation coefficients with python. It reimplements the ["Bayesian First Aid"](http://www.sumsar.net/blog/2014/03/bayesian-first-aid-pearson-correlation-test/) robust and non-robust Bayesian correlation coefficients in python using PyMC3. It should natively work for datasets with more than 2 features (although that hasn't been tested yet, and the plotting routines for this case are still work in progress). It also provides hierarchical inference of correlations in the presence of measurement uncertainty, based on Matzke et al. (2017), who in turn based their approach on Behseta et al. (2009). This package extends their approaches using multivariate Student's t distributions to provide robust alternatives to the methods they lay out.
+Pybaycor ("Pie Baker") is package for estimating Bayesian correlation coefficients with python. It reimplements the ["Bayesian First Aid"](http://www.sumsar.net/blog/2014/03/bayesian-first-aid-pearson-correlation-test/) robust and non-robust Bayesian correlation coefficients in python using PyMC3. It should natively work for datasets with more than 2 features (although that hasn't been tested yet, both for the fitting and plotting routines). It also provides hierarchical inference of correlations in the presence of measurement uncertainty, based on Matzke et al. (2017), who in turn based their approach on Behseta et al. (2009). This package extends their approaches using multivariate Student's t distributions to provide robust alternatives to the methods they lay out.
 
 ## Installation:
 
@@ -20,6 +20,7 @@ Pybaycor depends on a small number of packages:
 * Seaborn
 * PyMC3
 * Arviz
+* xarray
 
 ## Usage:
 
@@ -31,6 +32,7 @@ Pybaycor implements a number of classes for different kinds of inference. The mo
     baycor.summarise() #print out a summary of the posteriors from the the MCMC
     baycor.plot_trace(show=True) #Plot the trace and marginal distributions
     baycor.plot_data(show=True) #Plot the original data with the 2-sigma ellipse superimposed on it
+    baycor.plot_corner(show=True) #Plot the 1D and 2D marginal distributions of the multivariate distrib.ution
     
 The summary table will contain rows `chol_corr`, which indicate the summary statistics for the correlation coefficients. This includes the posterior mean and 2-sigma credible interval, as well as Rhat for the chains. The `chol_corr[i,i]` rows should all give means of 1 and standard deviations of 0, while the `chol_corr[i,j]` rows are the rows of interest. Remember that the covariance matrix is symmetrical, so `chol_corr[0,1] == chol_cor[1,0]` and you only need to read off one of those rows.
 
@@ -45,11 +47,12 @@ Because this approach introduces `n_dimensions` parameters per data point, it ca
 
     summary = baycor.summarise()
     
-to access the dataframe directly and extract useful parameters. At present, `plot_data()` does not give useful output for the hierarchical correlations, and should not be used. 
+to access the dataframe directly and extract useful parameters. You can also call the plotting routines in exactly the same way as above. If you use `plot_data()` for uncertain data, it will show you the original data, the inferred data based on the dilution of any correlation by the uncertainty, and the ellipse representing the 2-sigma region. 
 
 ## Future work 
 
-* Implement inference of correlations when only some features are uncertain. 
+* Implement inference of correlations when only some features are uncertain.
+* Implement inference of correlations with censored data (if this is possible?)
 * Improve plotting and output
 
 Community input is most welcome!

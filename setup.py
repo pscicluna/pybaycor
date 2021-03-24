@@ -37,7 +37,8 @@ setup(
                       'seaborn',
                       'xarray',
                       'pymc3==3.10.0',
-                      'arviz==0.11.0'
+                      'arviz==0.11.0',
+                      'xarray'
                       ],
     python_requires=">=3.7", 
 
