@@ -25,6 +25,8 @@ A ground-up modernisation. See `ROADMAP.md` for the analysis and the plan.
   asked, and save with `savefig` (the old code called the non-existent `plt.save`).
 - The package version is derived from git tags at build time (`hatch-vcs`); a
   tagged commit `vX.Y.Z` builds as `X.Y.Z`, later commits as `X.Y.(Z+1).devN+g<hash>`.
+  `CITATION.cff` follows the latest release tag (`scripts/sync_citation.py`, run by
+  CI on tag pushes and checked on every build).
 - `seaborn` is no longer a dependency.
 - The module `pybaycor.pybaycor` is deprecated; import from `pybaycor`.
 - All constructor arguments after `data` (after `sigma` for the hierarchical classes)

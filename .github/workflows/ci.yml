@@ -26,6 +26,7 @@ jobs:
           cache: true
       - run: pixi run -e dev lint
       - run: pixi run -e dev fmt-check
+      - run: pixi run -e dev check-citation
 
   test:
     name: Test (${{ matrix.os }}, ${{ matrix.environment }})
