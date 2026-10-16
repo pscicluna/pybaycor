@@ -25,6 +25,8 @@ extensions = [
 
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+# Shape descriptions such as "(n_points, n_dim)" in docstrings are not cross-references.
+suppress_warnings = ["ref.python"]
 
 # -- MyST --------------------------------------------------------------------
 myst_enable_extensions = ["dollarmath", "colon_fence"]
