@@ -41,8 +41,9 @@ A ground-up modernisation. See `ROADMAP.md` for the analysis and the plan.
   uncertainties.
 - `CorrelationData` container with validation and `describe()`.
 - Inference back-ends: NUTS via `pymc`, `nutpie`, `numpyro` or `blackjax`
-  (`nuts_sampler=`), plus `method="advi"`, `"fullrank_advi"`, `"smc"`,
-  `"pathfinder"` and `"map"`.
+  (`nuts_sampler=`; blackjax is experimental until PyMC's wrapper is fixed
+  upstream), plus `method="advi"`, `"fullrank_advi"`, `"smc"`, `"pathfinder"`
+  (approximate; less accurate for models with many latent values) and `"map"`.
 - `correlation_summary()` with per-pair posterior mean, median, credible interval,
   probability of a positive correlation and Savage-Dickey Bayes factor;
   `bayes_factor()`, `correlation()` sample access, `inferred_values()`,

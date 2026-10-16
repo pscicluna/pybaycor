@@ -17,8 +17,9 @@ handles:
   different limit for every point and every variable, with or without measurement
   error on the censored entries;
 * several inference engines on top of [PyMC](https://www.pymc.io) ≥ 6: NUTS through
-  `pymc`, `nutpie` (Rust) or `numpyro`/`blackjax` (JAX, so GPU/TPU-capable), as well as
-  variational inference, sequential Monte Carlo, Pathfinder and MAP;
+  `pymc`, `nutpie` (Rust) or `numpyro` (JAX, so GPU/TPU-capable; `blackjax` is wired up
+  but currently blocked by an upstream PyMC incompatibility), as well as variational
+  inference, sequential Monte Carlo, Pathfinder and MAP;
 * posterior summaries per pair of variables, including the probability that a
   correlation is positive and a Savage-Dickey Bayes factor against zero correlation.
 

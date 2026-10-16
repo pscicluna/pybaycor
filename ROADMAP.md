@@ -142,7 +142,7 @@ arguments select them:
 
 | `method` | Backend | Notes |
 | --- | --- | --- |
-| `"nuts"` (default) | `nuts_sampler="pymc"`, `"nutpie"`, `"numpyro"`, `"blackjax"` | `nutpie` (Rust, default when installed) and `numpyro`/`blackjax` (JAX) run on CPU, GPU or TPU without code changes |
+| `"nuts"` (default) | `nuts_sampler="pymc"`, `"nutpie"`, `"numpyro"`, `"blackjax"` | `nutpie` (Rust, default when installed) and `numpyro` (JAX) run on CPU, GPU or TPU without code changes; `blackjax` is experimental (see section 6) |
 | `"advi"`, `"fullrank_advi"` | PyMC variational inference | fast approximation; mean-field ADVI is known to underestimate correlations and is flagged as such |
 | `"smc"` | Sequential Monte Carlo | useful for multimodal posteriors and marginal likelihoods |
 | `"pathfinder"` | `pymc-extras` | fast quasi-Newton variational approximation; needs the `extras` extra |
@@ -179,5 +179,8 @@ matter of installing the optional extra.
    model high-dimensional; a marginalised (closed-form) likelihood for the Gaussian,
    uncensored, uncertain case ($x_i \sim \mathcal N(\mu, \Sigma + \mathrm{diag}(\sigma_i^2))$)
    would remove them entirely.
-6. **Blackjax**: PyMC 6.3's blackjax wrapper is incompatible with blackjax 1.7; the
-   extra pins `blackjax<1.7` until upstream resolves it.
+6. **Blackjax**: PyMC 6.3's blackjax wrapper is broken against released blackjax
+   versions (it forwards a `progress_bar` keyword that the NUTS kernel rejects, and
+   its chain-mapping code fails on current JAX). `pybaycor.inference` shims the first
+   problem and turns the second into a descriptive error that points at `numpyro`
+   and `nutpie`. Re-test when PyMC or blackjax ship a fix, then drop the shim.

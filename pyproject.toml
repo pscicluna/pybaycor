@@ -34,13 +34,13 @@ dependencies = [
 [project.optional-dependencies]
 jax = ["jax>=0.4.30", "numpyro>=0.15"]
 nutpie = ["nutpie>=0.16.10"]
-blackjax = ["blackjax>=1.2,<1.7"]
+blackjax = ["blackjax>=1.2"]
 extras = ["pymc-extras>=0.2"]
 all = [
   "jax>=0.4.30",
   "numpyro>=0.15",
   "nutpie>=0.16.10",
-  "blackjax>=1.2,<1.7",
+  "blackjax>=1.2",
   "pymc-extras>=0.2",
 ]
 dev = ["pytest>=8", "pytest-cov", "ruff>=0.6", "pre-commit", "mypy"]

@@ -10,7 +10,9 @@ Available methods
     Hamiltonian Monte Carlo (NUTS). The ``nuts_sampler`` argument picks the
     implementation: ``"pymc"`` (pure Python/numba), ``"nutpie"`` (Rust; the fastest CPU
     option and PyMC's default when installed), ``"numpyro"`` or ``"blackjax"`` (JAX;
-    run on CPU, GPU or TPU depending on the installed ``jax`` build).
+    run on CPU, GPU or TPU depending on the installed ``jax`` build). The blackjax
+    back-end is experimental: PyMC 6.3's wrapper is currently broken against released
+    blackjax versions and pybaycor raises a descriptive error when it fails.
 ``"advi"`` / ``"fullrank_advi"``
     Automatic differentiation variational inference. Fast approximations; mean-field
     ADVI systematically under-estimates posterior correlations and widths and should
@@ -56,6 +58,29 @@ def available_nuts_samplers() -> list[str]:
         if _importable(name):
             out.append(name)
     return out
+
+
+def _patch_blackjax_window_adaptation() -> None:
+    """Work around a PyMC 6.3 bug in its blackjax wrapper.
+
+    ``pymc.sampling.jax._blackjax_inference_loop`` forwards ``progress_bar`` to
+    :func:`blackjax.window_adaptation` before removing it from the keyword arguments,
+    and blackjax passes unknown keywords on to the NUTS kernel, which rejects them.
+    Dropping the keyword here keeps the back-end usable until the fix lands upstream.
+    """
+    import blackjax
+
+    original = blackjax.window_adaptation
+    if getattr(original, "_pybaycor_patched", False):
+        return
+
+    def window_adaptation(*args: Any, **kwargs: Any) -> Any:
+        kwargs.pop("progress_bar", None)
+        return original(*args, **kwargs)
+
+    window_adaptation._pybaycor_patched = True  # type: ignore[attr-defined]
+    window_adaptation.__doc__ = original.__doc__
+    blackjax.window_adaptation = window_adaptation
 
 
 def _map_to_datatree(point: dict[str, np.ndarray], model: pm.Model) -> xr.DataTree:
@@ -140,17 +165,29 @@ def fit_model(
                 f"nuts_sampler={nuts_sampler!r} requires the '{nuts_sampler}' package; "
                 f"install pybaycor[{extra}]"
             )
-        with model:
-            idata = pm.sample(
-                draws=draws,
-                tune=tune,
-                chains=chains,
-                nuts_sampler=nuts_sampler,
-                target_accept=target_accept,
-                random_seed=random_seed,
-                progressbar=progressbar,
-                **kwargs,
-            )
+        if nuts_sampler == "blackjax":
+            _patch_blackjax_window_adaptation()
+        try:
+            with model:
+                idata = pm.sample(
+                    draws=draws,
+                    tune=tune,
+                    chains=chains,
+                    nuts_sampler=nuts_sampler,
+                    target_accept=target_accept,
+                    random_seed=random_seed,
+                    progressbar=progressbar,
+                    **kwargs,
+                )
+        except (TypeError, ValueError, AttributeError) as err:
+            if nuts_sampler != "blackjax":
+                raise
+            raise RuntimeError(
+                "The blackjax back-end failed inside PyMC's blackjax wrapper. PyMC 6.3 and "
+                "current blackjax/JAX releases are not compatible with each other; use "
+                "nuts_sampler='numpyro' for a JAX sampler or 'nutpie' for the fastest CPU "
+                f"sampler. Original error: {err}"
+            ) from err
         return idata, None
 
     if method in ("advi", "fullrank_advi"):
