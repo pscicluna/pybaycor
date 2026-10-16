@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use pybaycor in your research, please cite it as below."
+title: pybaycor
+type: software
+version: 0.3.0
+license: MIT
+repository-code: https://github.com/pscicluna/pybaycor
+url: https://github.com/pscicluna/pybaycor
+abstract: >-
+  Bayesian inference of (robust) correlation coefficients for uncertain and
+  censored data, built on PyMC and ArviZ.
+authors:
+  - family-names: Scicluna
+    given-names: Peter
+keywords:
+  - bayesian
+  - correlation
+  - pymc
+  - astronomy

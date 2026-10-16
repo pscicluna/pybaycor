@@ -127,3 +127,19 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# pixi
+.pixi/
+
+# project-local tooling caches / outputs
+.venv/
+docs/_build/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info
+dist/
+build/
+.hypothesis/
