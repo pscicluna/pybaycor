@@ -166,20 +166,23 @@ matter of installing the optional extra.
 
 ## 6. Remaining work (not on this branch)
 
-1. **Location–scale extension**: allow $\boldsymbol\Sigma$ (or the error scale) to
+Each item below is tracked as a GitHub issue so it can be picked up independently.
+
+
+1. **Location–scale extension** ([#8](https://github.com/pscicluna/pybaycor/issues/8)): allow $\boldsymbol\Sigma$ (or the error scale) to
    depend on a covariate for data whose intrinsic scatter is genuinely heteroscedastic.
-2. **Missing data**: `NaN` entries that are neither observed nor censored could be
+2. **Missing data** ([#9](https://github.com/pscicluna/pybaycor/issues/9)): `NaN` entries that are neither observed nor censored could be
    treated as fully latent; the machinery exists, only the input validation needs to
    allow it and the identifiability warning needs writing.
-3. **Posterior predictive checks**: `plot_ppc` using ArviZ's `plot_ppc_*` family once
+3. **Posterior predictive checks** ([#10](https://github.com/pscicluna/pybaycor/issues/10)): `plot_ppc` using ArviZ's `plot_ppc_*` family once
    the observed-data group is populated for the mixed exact/latent case.
-4. **Publishing**: enable the release workflow (trusted publishing to PyPI from a tag),
+4. **Publishing** ([#11](https://github.com/pscicluna/pybaycor/issues/11)): enable the release workflow (trusted publishing to PyPI from a tag),
    Zenodo DOI, and a conda-forge feedstock.
-5. **Performance**: for very large `n_points` the per-entry latent parameters make the
+5. **Performance** ([#12](https://github.com/pscicluna/pybaycor/issues/12)): for very large `n_points` the per-entry latent parameters make the
    model high-dimensional; a marginalised (closed-form) likelihood for the Gaussian,
    uncensored, uncertain case ($x_i \sim \mathcal N(\mu, \Sigma + \mathrm{diag}(\sigma_i^2))$)
    would remove them entirely.
-6. **Blackjax**: PyMC 6.3's blackjax wrapper is broken against released blackjax
+6. **Blackjax** ([#13](https://github.com/pscicluna/pybaycor/issues/13)): PyMC 6.3's blackjax wrapper is broken against released blackjax
    versions (it forwards a `progress_bar` keyword that the NUTS kernel rejects, and
    its chain-mapping code fails on current JAX). `pybaycor.inference` shims the first
    problem and turns the second into a descriptive error that points at `numpyro`
