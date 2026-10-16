@@ -208,11 +208,14 @@ def build_model(
     scale = pt.as_tensor(transform.scale)
     scale_outer = np.outer(transform.scale, transform.scale)
 
+    exact_censored = data.is_exact & data.is_censored
     if not data.is_latent.any():
         case = "observed"
-    elif data.is_latent.all():
+    elif data.is_latent.all() and not exact_censored.any():
         case = "latent"
     else:
+        # Mixed fixed/latent entries, or exact censored entries that need the bounded
+        # reparameterisation below.
         case = "augmented"
 
     coords = {
@@ -263,10 +266,11 @@ def build_model(
             kwargs = {"nu": nu} if robust else {}
             cls = pm.MvStudentT if robust else pm.MvNormal
             cls("obs_z", mu=mu_z, chol=chol, observed=z.values, dims=("point", "feature"), **kwargs)
+            # No uncertainties, so there is nothing for error-scale factors to act on.
             info = ModelInfo(
                 transform,
                 robust,
-                error_scale,
+                False,
                 case,
                 summary_vars,
                 hp,

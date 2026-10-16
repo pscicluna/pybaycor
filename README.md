@@ -52,13 +52,13 @@ import numpy as np
 import pybaycor as pbc
 
 rng = np.random.default_rng(0)
-data = rng.multivariate_normal([0, 0], [[1, 0.6], [0.6, 1]], size=50)   # (n_points, n_dim)
+data = rng.multivariate_normal([0, 0], [[1, 0.6], [0.6, 1]], size=50)  # (n_points, n_dim)
 
 bc = pbc.BayesianCorrelation(data, names=["x", "y"], robust=True)
-bc.fit(draws=1000, tune=1000)          # NUTS; uses nutpie if installed, else the PyMC sampler
-bc.summarise()                         # table of mu, chol_stds, chol_corr, nu
-bc.correlation_summary()               # one row per pair: mean, interval, P(rho > 0), BF10
-bc.plot_data(plotfile="data.png")      # data with the posterior 95% ellipse
+bc.fit(draws=1000, tune=1000)  # NUTS; uses nutpie if installed, else the PyMC sampler
+bc.summarise()  # table of mu, chol_stds, chol_corr, nu
+bc.correlation_summary()  # one row per pair: mean, interval, P(rho > 0), BF10
+bc.plot_data(plotfile="data.png")  # data with the posterior 95% ellipse
 bc.plot_corner(plotfile="corner.png")  # posterior of the correlation coefficient(s)
 bc.plot_trace(plotfile="trace.png")
 ```
@@ -70,7 +70,7 @@ flattened samples of one coefficient.
 ### Measurement uncertainties
 
 ```python
-bc = pbc.BayesianCorrelation(data, sigma=sigma)      # sigma: (n_points, n_dim), scalar or (n_dim,)
+bc = pbc.BayesianCorrelation(data, sigma=sigma)  # sigma: (n_points, n_dim), scalar or (n_dim,)
 ```
 
 Entries of `sigma` that are `0` or `NaN` are treated as exact, so a variable without
@@ -101,8 +101,9 @@ bc = pbc.BayesianCorrelation(data, sigma=sigma, censoring=censoring)
 or with explicit bounds, which also allows interval censoring:
 
 ```python
-lower = np.full(data.shape, np.nan); upper = np.full(data.shape, np.nan)
-upper[3, 0] = 2.5                    # x_3 < 2.5
+lower = np.full(data.shape, np.nan)
+upper = np.full(data.shape, np.nan)
+upper[3, 0] = 2.5  # x_3 < 2.5
 lower[7, 1], upper[7, 1] = 0.1, 0.4  # 0.1 < y_7 < 0.4
 bc = pbc.BayesianCorrelation(data, lower=lower, upper=upper)
 ```
@@ -116,12 +117,12 @@ and as the trace variable `vals`.
 ### Inference options
 
 ```python
-bc.fit(method="nuts", nuts_sampler="numpyro")   # JAX; CPU/GPU/TPU depending on jaxlib
-bc.fit(method="nuts", nuts_sampler="nutpie")    # Rust sampler, fastest on CPU
-bc.fit(method="smc")                            # sequential Monte Carlo
-bc.fit(method="fullrank_advi")                  # variational approximation
-bc.fit(method="pathfinder")                     # needs pybaycor[extras]
-bc.fit(method="map")                            # point estimate
+bc.fit(method="nuts", nuts_sampler="numpyro")  # JAX; CPU/GPU/TPU depending on jaxlib
+bc.fit(method="nuts", nuts_sampler="nutpie")  # Rust sampler, fastest on CPU
+bc.fit(method="smc")  # sequential Monte Carlo
+bc.fit(method="fullrank_advi")  # variational approximation
+bc.fit(method="pathfinder")  # needs pybaycor[extras]
+bc.fit(method="map")  # point estimate
 ```
 
 Hyper-parameters can be overridden with `priors={"eta": 1.0, "sigma": 5.0, ...}`; see

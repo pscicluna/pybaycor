@@ -19,8 +19,9 @@ which parts of the model are switched on:
 import numpy as np
 import pybaycor as pbc
 
-bc = pbc.BayesianCorrelation(data, sigma=sigma, censoring=censoring, robust=True,
-                             names=["log L", "log M", "z"])
+bc = pbc.BayesianCorrelation(
+    data, sigma=sigma, censoring=censoring, robust=True, names=["log L", "log M", "z"]
+)
 print(bc.describe())
 ```
 
@@ -52,11 +53,11 @@ GPU or TPU when the installed `jaxlib` supports one.
 ## Summaries
 
 ```python
-bc.summarise()                 # ArviZ summary of the population parameters
-bc.correlation_summary()       # per pair: mean, median, sd, interval, P(rho>0), BF10
-bc.correlation(0, 1)           # posterior samples of one coefficient
-bc.bayes_factor(0, 1)          # Savage-Dickey BF10 against rho = 0
-bc.inferred_values()           # posterior mean and sd of the true values
+bc.summarise()  # ArviZ summary of the population parameters
+bc.correlation_summary()  # per pair: mean, median, sd, interval, P(rho>0), BF10
+bc.correlation(0, 1)  # posterior samples of one coefficient
+bc.bayes_factor(0, 1)  # Savage-Dickey BF10 against rho = 0
+bc.inferred_values()  # posterior mean and sd of the true values
 bc.null_pvalue(0, 1, n_sim=100)  # parametric-bootstrap p-value (slow)
 ```
 
