@@ -1,64 +1,161 @@
-# pybaycor 
+# pybaycor
 <sub><sup>*It's all you knead*</sup></sub>
 ---
 
-Pybaycor ("Pie Baker") is package for estimating Bayesian correlation coefficients with python. It reimplements the ["Bayesian First Aid"](http://www.sumsar.net/blog/2014/03/bayesian-first-aid-pearson-correlation-test/) robust and non-robust Bayesian correlation coefficients in python using PyMC3. It should natively work for datasets with more than 2 features (although that hasn't been tested yet, both for the fitting and plotting routines). It also provides hierarchical inference of correlations in the presence of measurement uncertainty, based on Matzke et al. (2017), who in turn based their approach on Behseta et al. (2009). This package extends their approaches using multivariate Student's t distributions to provide robust alternatives to the methods they lay out.
+Pybaycor ("Pie Baker") estimates Bayesian correlation coefficients in Python. It
+started as a re-implementation of the ["Bayesian First Aid"](http://www.sumsar.net/blog/2014/03/bayesian-first-aid-pearson-correlation-test/)
+robust and non-robust correlation tests, extended with the hierarchical treatment of
+measurement uncertainty of Matzke et al. (2017), and now provides one model that
+handles:
 
-## Installation:
+* any number of variables, with a multivariate Normal or (robust) multivariate
+  Student-t distribution and an LKJ prior on the correlation matrix;
+* measurement uncertainties on **any subset of entries**: variables with and without
+  errors can be mixed, and errors can differ from point to point (heteroscedastic) and
+  be asymmetric;
+* **censored data**: upper limits, lower limits and interval censoring, with a
+  different limit for every point and every variable, with or without measurement
+  error on the censored entries;
+* several inference engines on top of [PyMC](https://www.pymc.io) ≥ 6: NUTS through
+  `pymc`, `nutpie` (Rust) or `numpyro`/`blackjax` (JAX, so GPU/TPU-capable), as well as
+  variational inference, sequential Monte Carlo, Pathfinder and MAP;
+* posterior summaries per pair of variables, including the probability that a
+  correlation is positive and a Savage-Dickey Bayes factor against zero correlation.
 
-Pybaycor can be installed with pip:
+## Installation
 
-    pip install pybaycor
-    
+```
+pip install pybaycor            # core (PyMC, ArviZ, numpy, scipy, matplotlib)
+pip install pybaycor[nutpie]    # fastest CPU sampler
+pip install pybaycor[jax]       # numpyro sampler; install a GPU jaxlib to use a GPU
+pip install pybaycor[all]
+```
 
-## Dependencies:
+To develop, or to get a fully reproducible environment, use [pixi](https://pixi.sh):
 
-Pybaycor depends on a small number of packages:
+```
+git clone https://github.com/pscicluna/pybaycor && cd pybaycor
+pixi install -e dev     # or -e full for the JAX and nutpie back-ends
+pixi run test           # fast unit tests
+pixi run test-all       # including MCMC recovery tests
+pixi run lint && pixi run fmt-check
+pixi run docs
+```
 
-* Numpy
-* Matplotlib
-* Seaborn
-* PyMC3
-* Arviz
-* xarray
+pybaycor requires Python ≥ 3.12.
 
-## Usage:
+## Quick start
 
-Pybaycor implements a number of classes for different kinds of inference. The most basic of these is the `BayesianCorrelation` class. This class can be used quite straightfowardly to infer correlations with a multi-dimensional dataset with no measurement uncertainty:
+```python
+import numpy as np
+import pybaycor as pbc
 
-    import pybaycor as pbc
-    baycor = pbc.BayesianCorrelation(data=data) #where data is an (n_points, n_dimensions) array or array_like
-    baycor.fit(steps=1000, tune=1000) #do MCMC to infer the correlations
-    baycor.summarise() #print out a summary of the posteriors from the the MCMC
-    baycor.plot_trace(show=True) #Plot the trace and marginal distributions
-    baycor.plot_data(show=True) #Plot the original data with the 2-sigma ellipse superimposed on it
-    baycor.plot_corner(show=True) #Plot the 1D and 2D marginal distributions of the multivariate distrib.ution
-    
-The summary table will contain rows `chol_corr`, which indicate the summary statistics for the correlation coefficients. This includes the posterior mean and 2-sigma credible interval, as well as Rhat for the chains. The `chol_corr[i,i]` rows should all give means of 1 and standard deviations of 0, while the `chol_corr[i,j]` rows are the rows of interest. Remember that the covariance matrix is symmetrical, so `chol_corr[0,1] == chol_cor[1,0]` and you only need to read off one of those rows.
+rng = np.random.default_rng(0)
+data = rng.multivariate_normal([0, 0], [[1, 0.6], [0.6, 1]], size=50)   # (n_points, n_dim)
 
-The (**recommended**) robust interface is available through the `RobustBayesianCorrelation` class. This is invoked identically to the basic class, and uses a multivariate t distribution to reduce the influence of outliers. As a result, there is an additional hyperparameter `nu`, the number of degrees of freedom. Like all hyperparameters in pybaycor, this is chosen to follow a weakly-informative prior. The other methods (`fit`, `summarise`, `plot_trace` and `plot_data`) work identically and transparantly in the robust case as well. However, at present the `plot_data()` method only works for 2-dimensional correlations.
+bc = pbc.BayesianCorrelation(data, names=["x", "y"], robust=True)
+bc.fit(draws=1000, tune=1000)          # NUTS; uses nutpie if installed, else the PyMC sampler
+bc.summarise()                         # table of mu, chol_stds, chol_corr, nu
+bc.correlation_summary()               # one row per pair: mean, interval, P(rho > 0), BF10
+bc.plot_data(plotfile="data.png")      # data with the posterior 95% ellipse
+bc.plot_corner(plotfile="corner.png")  # posterior of the correlation coefficient(s)
+bc.plot_trace(plotfile="trace.png")
+```
 
-If your data has uncertain measurements, however, these classes are not appropriate. For that purpose, pybaycor implements hierarchical equivalents that perform joint inference on the data and the correlation to determine the distribution of *true* correlations given the diluted, observed correlation. Once again, both robust and non-robust interfaces are available, and I recommend the robust interface although the runtime for `fit()` is roughly 5-times longer. This can be invoked as:
+`bc.trace` is an `xarray.DataTree` (ArviZ 1 format) holding the posterior; the
+correlation matrix is the variable `chol_corr`, and `bc.correlation(i, j)` returns the
+flattened samples of one coefficient.
 
-    baycor = pbc.HierarchicalRobustBayesianCorrelation(data=data, sigma=sigma) #where data and sigma are (n_points, n_dimensions) arrays or array_like
-    baycor.fit(steps=1000, tune=1000)
-    
-Because this approach introduces `n_dimensions` parameters per data point, it can be difficult to read the summary. I'm working on improving the default formatting to make this useful, but you can always 
+### Measurement uncertainties
 
-    summary = baycor.summarise()
-    
-to access the dataframe directly and extract useful parameters. You can also call the plotting routines in exactly the same way as above. If you use `plot_data()` for uncertain data, it will show you the original data, the inferred data based on the dilution of any correlation by the uncertainty, and the ellipse representing the 2-sigma region. 
+```python
+bc = pbc.BayesianCorrelation(data, sigma=sigma)      # sigma: (n_points, n_dim), scalar or (n_dim,)
+```
 
-## Future work 
+Entries of `sigma` that are `0` or `NaN` are treated as exact, so a variable without
+uncertainties is simply a column of zeros, and a data set where only some points have
+error bars needs no special treatment. Asymmetric uncertainties use a two-piece
+Normal error model:
 
-* Implement inference of correlations when only some features are uncertain.
-* Implement inference of correlations with censored data (if this is possible?)
-* Improve plotting and output
+```python
+bc = pbc.BayesianCorrelation(data, sigma=(sigma_lower, sigma_upper))
+```
 
-Community input is most welcome!
+If the quoted error bars may be globally under- or over-estimated, `error_scale=True`
+infers a correction factor per variable (identifiable only when the quoted
+uncertainties vary from point to point).
 
+### Censored data
 
-## Relevant citations:
+Each entry can be flagged independently:
+
+```python
+# -1: the value in `data` is an upper limit (true value below it)
+#  1: the value is a lower limit;  0: observed
+censoring = np.zeros_like(data, dtype=int)
+censoring[upper_limit_mask, 1] = -1
+bc = pbc.BayesianCorrelation(data, sigma=sigma, censoring=censoring)
+```
+
+or with explicit bounds, which also allows interval censoring:
+
+```python
+lower = np.full(data.shape, np.nan); upper = np.full(data.shape, np.nan)
+upper[3, 0] = 2.5                    # x_3 < 2.5
+lower[7, 1], upper[7, 1] = 0.1, 0.4  # 0.1 < y_7 < 0.4
+bc = pbc.BayesianCorrelation(data, lower=lower, upper=upper)
+```
+
+A censored entry with `sigma > 0` is modelled through the probability that a noisy
+measurement would fall below (above, between) the limit(s); a censored entry with
+`sigma == 0` is treated as an unknown true value constrained to the allowed range.
+The inferred true values of all latent entries are available as `bc.inferred_values()`
+and as the trace variable `vals`.
+
+### Inference options
+
+```python
+bc.fit(method="nuts", nuts_sampler="numpyro")   # JAX; CPU/GPU/TPU depending on jaxlib
+bc.fit(method="nuts", nuts_sampler="nutpie")    # Rust sampler, fastest on CPU
+bc.fit(method="smc")                            # sequential Monte Carlo
+bc.fit(method="fullrank_advi")                  # variational approximation
+bc.fit(method="pathfinder")                     # needs pybaycor[extras]
+bc.fit(method="map")                            # point estimate
+```
+
+Hyper-parameters can be overridden with `priors={"eta": 1.0, "sigma": 5.0, ...}`; see
+`pybaycor.DEFAULT_PRIORS`. By default the data are standardised internally and all
+reported quantities are transformed back to data units.
+
+### Hypothesis testing
+
+`correlation_summary()` reports `prob_positive`, the posterior probability that the
+correlation exceeds zero, and `bf10`, the Savage-Dickey Bayes factor for a non-zero
+correlation. A parametric-bootstrap p-value (refit under the null of no correlation,
+simulate, refit) is available through `bc.null_pvalue()`; it is expensive.
+
+## Migrating from pybaycor 0.2
+
+* `RobustBayesianCorrelation`, `HierarchicalBayesianCorrelation` and
+  `HierarchicalRobustBayesianCorrelation` still exist and behave as before, but are
+  thin wrappers: `BayesianCorrelation(data, sigma=..., robust=True)` is equivalent.
+* `fit(steps=...)` is now `fit(draws=...)`; the return value is an `xarray.DataTree`.
+* Summary rows are labelled by variable name (`chol_corr[x, y]`).
+* `mu_prior`/`sigma_prior` still work but are deprecated in favour of `priors=`.
+* Plot methods return figures and no longer show them unless `show=True`.
+
+## Model
+
+The true values $\boldsymbol\theta_i$ of each data point follow
+$\mathcal{MVN}(\boldsymbol\mu, \boldsymbol\Sigma)$ or
+$\mathcal{MVT}_\nu(\boldsymbol\mu, \boldsymbol\Sigma)$ with
+$\boldsymbol\Sigma = \mathrm{diag}(\boldsymbol s)\,\mathbf R\,\mathrm{diag}(\boldsymbol s)$,
+$\mathbf R \sim \mathrm{LKJ}(\eta=2)$, $\nu \sim 1 + \mathrm{Exponential}(1/29)$.
+Each observed entry is then either equal to its true value, a Normal (or two-piece
+Normal) measurement around it, or a censoring statement about it. See `ROADMAP.md`
+for the full description and the development plan.
+
+## Relevant citations
 
 ```
 @inbook{inbook,
@@ -82,16 +179,8 @@ number = {4},
 pages = {2186-2193},
 year = {2009},
 doi = {10.1152/jn.90727.2008},
-    note ={PMID: 19129297},
-
-URL = { 
-        https://doi.org/10.1152/jn.90727.2008
-    
-},
-eprint = { 
-        https://doi.org/10.1152/jn.90727.2008
-    
-}
+note ={PMID: 19129297},
+URL = {https://doi.org/10.1152/jn.90727.2008},
 }
 
 @article{10.1525/collabra.78,
@@ -106,6 +195,16 @@ eprint = {
     doi = {10.1525/collabra.78},
     url = {https://doi.org/10.1525/collabra.78},
     note = {25},
-    eprint = {https://online.ucpress.edu/collabra/article-pdf/3/1/25/436268/78-1314-1-pb.pdf},
+}
+
+@article{lewandowski2009,
+    author = {Lewandowski, Daniel and Kurowicka, Dorota and Joe, Harry},
+    title = {Generating random correlation matrices based on vines and extended onion method},
+    journal = {Journal of Multivariate Analysis},
+    volume = {100},
+    number = {9},
+    pages = {1989-2001},
+    year = {2009},
+    doi = {10.1016/j.jmva.2009.04.008},
 }
 ```
