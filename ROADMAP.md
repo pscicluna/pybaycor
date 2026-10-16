@@ -93,7 +93,7 @@ chosen independently per entry from the inputs `sigma`, `censoring`, `lower`,
 | --- | --- | --- |
 | exact, observed | `sigma == 0`/NaN, not censored | $\theta_{ij} = x_{ij}$ fixed (no latent parameter) |
 | uncertain, observed | `sigma_ij > 0` | $x_{ij} \sim \mathcal N(\theta_{ij}, \sigma_{ij})$ |
-| uncertain, asymmetric | `sigma=(lo, hi)` | two-piece Normal with scales $\sigma^-_{ij}, \sigma^+_{ij}$ ([#5](https://github.com/pscicluna/pybaycor/issues/5)) |
+| uncertain, asymmetric | `sigma_lower=`, `sigma_upper=` | two-piece Normal with scales $\sigma^-_{ij}, \sigma^+_{ij}$ ([#5](https://github.com/pscicluna/pybaycor/issues/5)) |
 | uncertain, censored | limit + `sigma_ij > 0` | $P(x < U) = \Phi\big((U-\theta_{ij})/\sigma_{ij}\big)$ (and the lower-limit / interval analogues) |
 | exact, censored | limit, `sigma == 0` | $\theta_{ij}$ sampled as a latent parameter constrained to the censoring interval (data augmentation) |
 
@@ -160,7 +160,7 @@ matter of installing the optional extra.
 | #2 integration tests | `tests/test_inference.py` recovery tests (marked `slow`) incl. censoring and partial uncertainty |
 | #3 documentation | docstrings on all public objects, Sphinx/AutoAPI skeleton, rewritten README |
 | #4 plotting | `plotting.py` rewritten: any dimensionality, error bars, censoring arrows, posterior ellipses, corner plots of the correlation coefficients only, every function returns the figure and accepts `ax` |
-| #5 asymmetric errors | two-piece Normal observation channel (`sigma=(lower, upper)`) |
+| #5 asymmetric errors | two-piece Normal observation channel (`sigma_lower=`/`sigma_upper=`) |
 | #6 p-values | `correlation_summary()` reports $P(\rho>0)$ and the Savage-Dickey Bayes factor for $\rho_{ij}=0$; the parametric-bootstrap p-value from the issue is provided by `null_pvalue()` and is documented as expensive |
 | #7 PyMC3 → modern stack | PyMC ≥ 6.1 / PyTensor 3 / ArviZ ≥ 1.1 with JAX and nutpie backends |
 

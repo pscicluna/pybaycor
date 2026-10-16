@@ -31,6 +31,7 @@ Variables stored in the trace
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -41,13 +42,15 @@ from pymc.distributions.dist_math import normal_lccdf, normal_lcdf
 
 from .data import CorrelationData, Standardisation
 
-__all__ = ["DEFAULT_PRIORS", "ModelInfo", "build_model"]
+__all__ = ["DEFAULT_PRIORS", "ModelInfo", "build_model", "set_model_values"]
 
 #: Default hyper-parameters, expressed in *standardised* units (see
 #: :class:`~pybaycor.data.Standardisation`). Keys:
 #:
-#: ``mu``: ``(mean, sd)`` of the Normal prior on each variable's mean;
-#: ``sigma``: scale ``beta`` of the half-Cauchy prior on each variable's standard deviation;
+#: ``mu``: ``(mean, sd)`` of the Normal prior on each variable's mean; each may be a
+#: scalar or have one entry per variable;
+#: ``sigma``: scale ``beta`` of the half-Cauchy prior on each variable's standard
+#: deviation (scalar or one entry per variable);
 #: ``eta``: shape of the LKJ prior on the correlation matrix (``eta > 1`` shrinks towards
 #: zero correlation, ``eta = 1`` is uniform over correlation matrices);
 #: ``nu_rate``: rate of the shifted-exponential prior on the Student-t degrees of freedom,
@@ -96,6 +99,7 @@ class ModelInfo:
     n_dim: int = 0
     names: list[str] = field(default_factory=list)
     independent: bool = False
+    mutable_values: bool = False
 
     @property
     def has_latent(self) -> bool:
@@ -134,6 +138,76 @@ def twopiece_logsf(x: Any, mu: Any, s_lo: Any, s_hi: Any) -> Any:
     return pt.switch(pt.lt(x, mu), below, above)
 
 
+def _prior_array(key: str, value: Any, n_dim: int, positive: bool) -> np.ndarray:
+    """Validate a scalar-or-per-variable hyper-parameter and return it as an array."""
+    arr = np.asarray(value, dtype=float)
+    if arr.ndim > 1 or (arr.ndim == 1 and arr.size != n_dim):
+        raise ValueError(
+            f"priors[{key!r}] must be a scalar or have one entry per variable ({n_dim}); "
+            f"got shape {arr.shape}"
+        )
+    if not np.all(np.isfinite(arr)):
+        raise ValueError(f"priors[{key!r}] must be finite")
+    if positive and np.any(arr <= 0):
+        raise ValueError(f"priors[{key!r}] must be strictly positive")
+    return arr
+
+
+def _validate_priors(hp: dict[str, Any], n_dim: int) -> dict[str, Any]:
+    """Check the hyper-parameters and normalise them to arrays/floats."""
+    try:
+        mu_mean, mu_sd = hp["mu"]
+    except (TypeError, ValueError) as err:
+        raise ValueError("priors['mu'] must be a (mean, sd) pair") from err
+    out = dict(hp)
+    out["mu"] = (
+        _prior_array("mu (mean)", mu_mean, n_dim, positive=False),
+        _prior_array("mu (sd)", mu_sd, n_dim, positive=True),
+    )
+    out["sigma"] = _prior_array("sigma", hp["sigma"], n_dim, positive=True)
+    for key in ("eta", "nu_rate", "error_scale_sd"):
+        val = np.asarray(hp[key], dtype=float)
+        if val.ndim != 0 or not np.isfinite(val) or val <= 0:
+            raise ValueError(f"priors[{key!r}] must be a positive finite scalar")
+        out[key] = float(val)
+    return out
+
+
+def _value_arrays(z: CorrelationData) -> dict[str, np.ndarray]:
+    """Return the data-dependent arrays of the model graph, in standardised units.
+
+    These are the only arrays that change between data sets with the same
+    uncertainty/censoring pattern, so they are the ones :func:`set_model_values` can
+    replace when the model was built with ``mutable_values=True``.
+    """
+    free = z.is_latent & ~(z.is_exact & z.is_censored)
+    unc = z.is_uncertain
+    sym_obs = unc & z.is_observed & ~z.is_asymmetric
+    asym_obs = unc & z.is_observed & z.is_asymmetric
+    return {
+        "values_z": z.values,
+        "fixed_values_z": np.where(z.is_latent, 0.0, z.values),
+        "free_init_z": _initial_latent(z)[np.nonzero(free)],
+        "obs_values_z": z.values[np.nonzero(sym_obs)],
+        "asym_values_z": z.values[np.nonzero(asym_obs)],
+    }
+
+
+def set_model_values(model: pm.Model, info: ModelInfo, data: CorrelationData) -> None:
+    """Replace the observed values of a model built with ``mutable_values=True``.
+
+    ``data`` must have the same shape, uncertainty pattern and censoring pattern (same
+    limits) as the data the model was built from; only the values may differ. Used to
+    refit many simulated data sets without rebuilding and recompiling the model.
+    """
+    if not info.mutable_values:
+        raise ValueError("The model was not built with mutable_values=True")
+    if data.shape != (info.n_points, info.n_dim):
+        raise ValueError("The new data must have the same shape as the original data")
+    arrays = _value_arrays(data.standardised(info.transform))
+    pm.set_data({k: v for k, v in arrays.items() if k in model.named_vars}, model=model)
+
+
 def _initial_latent(data: CorrelationData) -> np.ndarray:
     """Sensible starting values for the latent true values (standardised units)."""
     init = data.values.copy()
@@ -154,6 +228,7 @@ def build_model(
     standardize: bool = True,
     transform: Standardisation | None = None,
     independent: bool = False,
+    mutable_values: bool = False,
 ) -> tuple[pm.Model, ModelInfo]:
     """Build the PyMC model for ``data``.
 
@@ -185,6 +260,10 @@ def build_model(
         Fix the correlation matrix to the identity (the null model of no correlation).
         Used by :meth:`~pybaycor.BayesianCorrelation.null_pvalue` to simulate data under
         the null hypothesis.
+    mutable_values : bool, default False
+        Store the observed values in :func:`pymc.Data` containers so that
+        :func:`set_model_values` can swap in another data set with the same
+        uncertainty and censoring pattern without rebuilding the model.
 
     Returns
     -------
@@ -201,6 +280,15 @@ def build_model(
         hp.update(priors)
 
     n, d = data.shape
+    hp = _validate_priors(hp, d)
+    if error_scale and not data.has_uncertainties:
+        warnings.warn(
+            "error_scale=True has no effect because the data have no uncertainties; "
+            "the error-scale factors are not added to the model",
+            UserWarning,
+            stacklevel=2,
+        )
+        error_scale = False
     if transform is None:
         transform = Standardisation.from_data(data) if standardize else Standardisation.identity(d)
     z = data.standardised(transform)
@@ -224,13 +312,18 @@ def build_model(
         "feature2": list(data.names),
     }
     summary_vars = ["mu", "chol_stds", "chol_corr"]
+    values = _value_arrays(z)
+
+    def value_tensor(name: str) -> Any:
+        """Return the named data array, as a :func:`pymc.Data` container when mutable."""
+        return pm.Data(name, values[name]) if mutable_values else values[name]
 
     with pm.Model(coords=coords) as model:
         # ---- population-level parameters (standardised units) -------------------
         mu_mean, mu_sd = hp["mu"]
         mu_z = pm.Normal("mu_z", mu=mu_mean, sigma=mu_sd, dims="feature")
         if independent:
-            stds_z = pm.HalfCauchy("stds_z", beta=float(hp["sigma"]), dims="feature")
+            stds_z = pm.HalfCauchy("stds_z", beta=hp["sigma"], dims="feature")
             chol = pt.diag(stds_z)
             corr = pt.eye(d)
         else:
@@ -238,7 +331,7 @@ def build_model(
                 "chol_z",
                 n=d,
                 eta=float(hp["eta"]),
-                sd_dist=pm.HalfCauchy.dist(float(hp["sigma"])),
+                sd_dist=pm.HalfCauchy.dist(beta=hp["sigma"], shape=(d,)),
                 compute_corr=True,
                 store_in_trace=False,
             )
@@ -265,8 +358,14 @@ def build_model(
         if case == "observed":
             kwargs = {"nu": nu} if robust else {}
             cls = pm.MvStudentT if robust else pm.MvNormal
-            cls("obs_z", mu=mu_z, chol=chol, observed=z.values, dims=("point", "feature"), **kwargs)
-            # No uncertainties, so there is nothing for error-scale factors to act on.
+            cls(
+                "obs_z",
+                mu=mu_z,
+                chol=chol,
+                observed=value_tensor("values_z"),
+                dims=("point", "feature"),
+                **kwargs,
+            )
             info = ModelInfo(
                 transform,
                 robust,
@@ -278,6 +377,7 @@ def build_model(
                 d,
                 list(data.names),
                 independent,
+                mutable_values=mutable_values,
             )
             return model, info
 
@@ -299,7 +399,7 @@ def build_model(
             # again inside the potential, leaving exactly the multivariate density on the
             # assembled rows. Entries that are exact *and* censored are reparameterised
             # so that they always respect their censoring bounds.
-            theta = pt.as_tensor(np.where(z.is_latent, 0.0, z.values))
+            theta = pt.as_tensor(value_tensor("fixed_values_z"))
             extra_logp = []
 
             free = z.is_latent & ~(z.is_exact & z.is_censored)
@@ -308,7 +408,7 @@ def build_model(
                 pseudo_sd = np.maximum(z.sigma[idx], 1e-3)
                 raw = pm.Normal(
                     "theta_free",
-                    mu=init[idx],
+                    mu=value_tensor("free_init_z"),
                     sigma=pseudo_sd,
                     shape=int(free.sum()),
                     initval=init[idx],
@@ -365,7 +465,7 @@ def build_model(
                 "obs_z",
                 mu=theta[idx],
                 sigma=scaled(z.sigma[idx], idx[1]),
-                observed=z.values[idx],
+                observed=value_tensor("obs_values_z"),
             )
 
         asym_obs = unc & z.is_observed & z.is_asymmetric
@@ -374,7 +474,7 @@ def build_model(
             pm.Potential(
                 "obs_asym_logp",
                 twopiece_logp(
-                    z.values[idx],
+                    value_tensor("asym_values_z"),
                     theta[idx],
                     scaled(z.sigma_lower[idx], idx[1]),
                     scaled(z.sigma_upper[idx], idx[1]),
@@ -417,6 +517,16 @@ def build_model(
             pm.Potential("obs_interval_logp", pm.math.logdiffexp(lcdf_hi, lcdf_lo).sum())
 
     info = ModelInfo(
-        transform, robust, error_scale, case, summary_vars, hp, n, d, list(data.names), independent
+        transform,
+        robust,
+        error_scale,
+        case,
+        summary_vars,
+        hp,
+        n,
+        d,
+        list(data.names),
+        independent,
+        mutable_values=mutable_values,
     )
     return model, info

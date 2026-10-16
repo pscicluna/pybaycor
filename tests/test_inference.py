@@ -265,7 +265,7 @@ def test_asymmetric_errors():
     truth = make_gaussian_data(60, 0.7, seed=10)
     s_lo, s_hi = 0.2, 0.5
     noisy = add_twopiece_noise(truth, rng, s_lo, s_hi)
-    bc = BayesianCorrelation(noisy, sigma=(s_lo, s_hi))
+    bc = BayesianCorrelation(noisy, sigma_lower=s_lo, sigma_upper=s_hi)
     assert bc.data.is_asymmetric.all()
     assert "obs_asym_logp" in {p.name for p in bc.model.potentials}
     fit_nuts(bc, seed=10)

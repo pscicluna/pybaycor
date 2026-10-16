@@ -114,6 +114,61 @@ class TestConstruction:
         with pytest.raises(ValueError, match="Unknown prior keys"):
             BayesianCorrelation(xy, priors={"nope": 1})
 
+    def test_correlation_data_with_extra_arguments_raises(self, xy):
+        cd = CorrelationData(xy)
+        with pytest.raises(ValueError, match=r"would be ignored.*sigma"):
+            BayesianCorrelation(cd, sigma=0.5)
+        with pytest.raises(ValueError, match="names"):
+            BayesianCorrelation(cd, names=["a", "b"])
+        bc = BayesianCorrelation(cd)
+        assert bc.data is cd
+
+    def test_xy_with_errors(self, xy):
+        xerr = np.full(N, 0.1)
+        bc = BayesianCorrelation(x=xy[:, 0], y=xy[:, 1], x_err=xerr, y_err=0.2)
+        np.testing.assert_array_equal(bc.data.sigma[:, 0], 0.1)
+        np.testing.assert_array_equal(bc.data.sigma[:, 1], 0.2)
+        assert not bc.data.is_asymmetric.any()
+        bc = BayesianCorrelation(x=xy[:, 0], y=xy[:, 1], y_err=0.2)
+        assert bc.data.is_exact[:, 0].all()
+        with pytest.raises(ValueError, match="not both"):
+            BayesianCorrelation(x=xy[:, 0], y=xy[:, 1], x_err=0.1, sigma=0.1)
+        with pytest.raises(ValueError, match="cannot be combined"):
+            BayesianCorrelation(xy, x_err=0.1)
+        with pytest.raises(ValueError, match="same length"):
+            BayesianCorrelation(x=xy[:, 0], y=xy[:-1, 1])
+
+    def test_asymmetric_sigma_keywords(self, xy):
+        bc = BayesianCorrelation(xy, sigma_lower=0.1, sigma_upper=0.3)
+        assert bc.data.is_asymmetric.all()
+        assert "obs_asym_logp" in {p.name for p in bc.model.potentials}
+
+    def test_deprecated_per_variable_priors(self, xy):
+        with pytest.warns(DeprecationWarning):
+            bc = BayesianCorrelation(
+                xy, mu_prior=[[0.0, 0.0], [1000.0, 1000.0]], sigma_prior=[100.0, 5.0]
+            )
+        np.testing.assert_array_equal(bc.info.priors["mu"][1], [1000.0, 1000.0])
+        np.testing.assert_array_equal(bc.info.priors["sigma"], [100.0, 5.0])
+        assert np.isfinite(bc.model.compile_logp()(bc.model.initial_point()))
+        with (
+            pytest.raises(ValueError, match="mu_prior must be"),
+            pytest.warns(DeprecationWarning),
+        ):
+            BayesianCorrelation(xy, mu_prior=[0.0, 1.0, 2.0])
+        with (
+            pytest.raises(ValueError, match="sigma_prior must be"),
+            pytest.warns(DeprecationWarning),
+        ):
+            BayesianCorrelation(xy, sigma_prior=[1.0, 2.0, 3.0])
+
+    def test_error_scale_without_uncertainties_is_reported(self, xy):
+        with pytest.warns(UserWarning, match="error_scale=True has no effect"):
+            bc = BayesianCorrelation(xy, error_scale=True)
+        assert bc.error_scale is False
+        assert bc.info.error_scale is False
+        assert "error-scale" not in bc.describe()
+
     def test_deprecated_priors_warn_and_disable_standardisation(self, xy):
         with pytest.warns(DeprecationWarning, match="mu_prior/sigma_prior are deprecated"):
             bc = BayesianCorrelation(xy, mu_prior=[1.0, 3.0], sigma_prior=4.0)
@@ -298,6 +353,31 @@ class TestMapFit:
 
 
 # -------------------------------------------------------------- fit arguments
+class TestPlots:
+    """Smoke tests of the plotting entry points on the cheap MAP fits."""
+
+    @pytest.fixture(autouse=True)
+    def _agg(self):
+        import matplotlib
+
+        matplotlib.use("Agg")
+
+    def test_plot_data_colour_kwargs(self, map_latent):
+        import matplotlib.pyplot as plt
+
+        fig = map_latent.plot_data(color="red", s=10)
+        assert fig is not None
+        plt.close(fig)
+        fig = map_latent.plot_data(facecolors="none", edgecolors="k", n_ellipses=0)
+        plt.close(fig)
+
+    def test_plot_corner_and_trace(self, map_latent):
+        import matplotlib.pyplot as plt
+
+        plt.close(map_latent.plot_corner())
+        plt.close(map_latent.plot_trace(var_names=["mu"]))
+
+
 class TestFitArguments:
     def test_invalid_method(self, xy):
         with pytest.raises(ValueError, match="method must be one of"):
@@ -354,8 +434,13 @@ class TestLegacyClasses:
         assert bc.data.has_uncertainties
         np.testing.assert_array_equal(bc.data.sigma, 0.2)
 
-    def test_hierarchical_accepts_tuple_sigma(self, xy):
+    def test_hierarchical_tuple_sigma_is_per_variable(self, xy):
         bc = HierarchicalBayesianCorrelation(xy, (0.1, 0.3))
+        assert not bc.data.is_asymmetric.any()
+        np.testing.assert_array_equal(bc.data.sigma[:, 1], 0.3)
+
+    def test_hierarchical_asymmetric_keywords(self, xy):
+        bc = HierarchicalBayesianCorrelation(xy, None, sigma_lower=0.1, sigma_upper=0.3)
         assert bc.data.is_asymmetric.all()
 
     def test_hierarchical_robust(self, xy):

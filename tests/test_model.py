@@ -164,11 +164,65 @@ class TestOptions:
         _finite_logps(model)
 
     def test_error_scale_without_uncertainties(self, xdata):
-        # Nothing to scale in the observed case: the model builds without the factor.
-        model, info = build_model(CorrelationData(xdata), error_scale=True)
+        # Nothing to scale in the observed case: the model builds without the factor
+        # and says so.
+        with pytest.warns(UserWarning, match="error_scale=True has no effect"):
+            model, info = build_model(CorrelationData(xdata), error_scale=True)
         assert info.case == "observed"
+        assert not info.error_scale
         assert "error_scale" not in free_rv_names(model)
         assert "error_scale" not in info.summary_vars
+
+    def test_per_variable_priors(self, xdata):
+        # xdata has two variables.
+        priors = {"mu": ([0.0, 1.0], [1.0, 2.0]), "sigma": [1.0, 2.0]}
+        model, info = build_model(CorrelationData(xdata), priors=priors)
+        np.testing.assert_array_equal(info.priors["mu"][1], [1.0, 2.0])
+        np.testing.assert_array_equal(info.priors["sigma"], [1.0, 2.0])
+        assert np.isfinite(model.compile_logp()(model.initial_point()))
+
+    @pytest.mark.parametrize(
+        "priors",
+        [
+            {"mu": (0.0, 0.0)},
+            {"mu": (0.0, [1.0, 2.0, 3.0])},
+            {"mu": 3.0},
+            {"sigma": -1.0},
+            {"sigma": [1.0, 2.0, 3.0]},
+            {"eta": 0.0},
+            {"nu_rate": [1.0, 2.0]},
+        ],
+    )
+    def test_invalid_priors_raise(self, xdata, priors):
+        with pytest.raises(ValueError, match="priors"):
+            build_model(CorrelationData(xdata), priors=priors)
+
+    def test_mutable_values(self, xdata, rng):
+        from pybaycor.model import set_model_values
+
+        sig = np.full(xdata.shape, 0.3)
+        sig[:, 1] = 0.0
+        cens = np.zeros(xdata.shape, dtype=int)
+        cens[:3, 1] = -1
+        cd = CorrelationData(xdata, sigma=sig, censoring=cens)
+        model, info = build_model(cd, mutable_values=True)
+        assert info.mutable_values
+        assert {"fixed_values_z", "free_init_z", "obs_values_z"} <= set(model.named_vars)
+        logp = model.compile_logp()
+        point = model.initial_point()
+        before = logp(point)
+        shifted = CorrelationData(xdata + 0.7, sigma=sig, censoring=cens)
+        set_model_values(model, info, shifted)
+        after = logp(point)
+        assert np.isfinite(before) and np.isfinite(after) and before != after
+        # The fixed entries of ``vals`` now reflect the new data.
+        vals = eval_at_point(model, ["vals"], point)["vals"]
+        fixed = cd.is_fixed
+        np.testing.assert_allclose(vals[fixed], shifted.values[fixed])
+        with pytest.raises(ValueError, match="mutable_values"):
+            set_model_values(build_model(cd)[0], build_model(cd)[1], shifted)
+        with pytest.raises(ValueError, match="same shape"):
+            set_model_values(model, info, CorrelationData(xdata[:-1], sigma=sig[:-1]))
 
     def test_independent(self, xdata):
         model, info = build_model(CorrelationData(xdata), independent=True)
@@ -232,7 +286,7 @@ class TestFiniteLogp:
     def test_asymmetric_sigma(self, xdata):
         lo = np.full(xdata.shape, 0.2)
         hi = np.full(xdata.shape, 0.5)
-        model, _ = build_model(CorrelationData(xdata, sigma=(lo, hi)))
+        model, _ = build_model(CorrelationData(xdata, sigma_lower=lo, sigma_upper=hi))
         assert {p.name for p in model.potentials} == {"obs_asym_logp"}
         _finite_logps(model)
 
@@ -240,7 +294,7 @@ class TestFiniteLogp:
         lo = np.zeros(xdata.shape)
         hi = np.zeros(xdata.shape)
         lo[:4, 0], hi[:4, 0] = 0.2, 0.5
-        model, info = build_model(CorrelationData(xdata, sigma=(lo, hi)))
+        model, info = build_model(CorrelationData(xdata, sigma_lower=lo, sigma_upper=hi))
         assert info.case == "augmented"
         assert "obs_asym_logp" in {p.name for p in model.potentials}
         _finite_logps(model)
@@ -272,7 +326,7 @@ class TestFiniteLogp:
         hi = np.full(xdata.shape, np.nan)
         lo[:3, 1] = xdata[:3, 1] - 0.5
         hi[:3, 1] = xdata[:3, 1] + 0.5
-        cd = CorrelationData(xdata, sigma=(lo_s, hi_s), lower=lo, upper=hi)
+        cd = CorrelationData(xdata, sigma_lower=lo_s, sigma_upper=hi_s, lower=lo, upper=hi)
         model, _ = build_model(cd, error_scale=True, robust=True)
         _finite_logps(model)
 
@@ -526,7 +580,7 @@ class TestCensoredLikelihood:
     def test_asymmetric_observed_channel(self, xdata, rng):
         lo_s = np.full(xdata.shape, 0.2)
         hi_s = np.full(xdata.shape, 0.6)
-        cd = CorrelationData(xdata, sigma=(lo_s, hi_s))
+        cd = CorrelationData(xdata, sigma_lower=lo_s, sigma_upper=hi_s)
         model, _ = build_model(cd, standardize=False)
         point = model.initial_point()
         point["theta_z"] = xdata + rng.normal(scale=0.5, size=xdata.shape)

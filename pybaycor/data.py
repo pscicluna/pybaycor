@@ -64,15 +64,20 @@ def _as_2d(name: str, arr: ArrayLike, shape: tuple[int, int] | None = None) -> N
         if out.ndim == 0:
             out = np.full(shape, float(out))
         elif out.ndim == 1:
-            if out.shape[0] == shape[1]:
-                out = np.broadcast_to(out[None, :], shape).copy()
-            elif out.shape[0] == shape[0] and shape[1] == 1:
-                out = out[:, None].copy()
-            else:
+            # A 1-D array always means one value per variable. When n_points == n_dim
+            # that reading is indistinguishable from one value per point, so insist on
+            # an explicit 2-D array in that case.
+            if shape[0] == shape[1]:
+                raise ValueError(
+                    f"{name} is 1-D but data has as many points as variables ({shape}); "
+                    "pass a 2-D (n_points, n_dim) array to make the meaning explicit"
+                )
+            if out.shape[0] != shape[1]:
                 raise ValueError(
                     f"{name} has length {out.shape[0]} but should have one entry per "
                     f"variable ({shape[1]}) or shape {shape}"
                 )
+            out = np.broadcast_to(out[None, :], shape).copy()
         elif out.shape != shape:
             raise ValueError(f"{name} has shape {out.shape} but data has shape {shape}")
     elif out.ndim != 2:
@@ -188,12 +193,16 @@ class CorrelationData:
         Observed values. For a censored entry this is the limit (for one-sided
         censoring) or may be ``NaN`` (when ``lower``/``upper`` give the bounds).
     sigma : array_like, optional
-        Measurement uncertainties. May be a scalar, an ``(n_dim,)`` vector (one value
-        per variable), or an ``(n_points, n_dim)`` array. ``0`` or ``NaN`` marks an entry
-        as *exact* (no measurement error), so variables with and without uncertainties
-        can be mixed freely, as can points with and without uncertainties within a
-        variable. A 2-tuple ``(sigma_lower, sigma_upper)`` of such arrays gives
-        asymmetric uncertainties (two-piece Normal errors).
+        Symmetric measurement uncertainties. May be a scalar, an ``(n_dim,)`` vector
+        (one value per variable), or an ``(n_points, n_dim)`` array. ``0`` or ``NaN``
+        marks an entry as *exact* (no measurement error), so variables with and without
+        uncertainties can be mixed freely, as can points with and without uncertainties
+        within a variable. When ``n_points == n_dim`` a 1-D input is ambiguous and a 2-D
+        array is required.
+    sigma_lower, sigma_upper : array_like, optional
+        Asymmetric uncertainties below and above the value (two-piece Normal errors),
+        with the same shape rules as ``sigma``. Both must be given together and cannot
+        be combined with ``sigma``.
     censoring : array_like, optional
         Per-entry censoring flags with the same shape as ``data`` (or a scalar applied
         to everything). Each flag is one of ``0``/``"observed"``; ``-1``/``"upper"``
@@ -238,11 +247,14 @@ class CorrelationData:
     def __init__(
         self,
         data: ArrayLike,
-        sigma: ArrayLike | tuple[ArrayLike, ArrayLike] | None = None,
+        sigma: ArrayLike | None = None,
         censoring: ArrayLike | None = None,
         lower: ArrayLike | None = None,
         upper: ArrayLike | None = None,
         names: list[str] | None = None,
+        *,
+        sigma_lower: ArrayLike | None = None,
+        sigma_upper: ArrayLike | None = None,
     ) -> None:
         values = np.asarray(data, dtype=float)
         if values.ndim == 1:
@@ -260,12 +272,17 @@ class CorrelationData:
         values = values.copy()
 
         # --- uncertainties -------------------------------------------------------
-        if sigma is None:
+        asymmetric = sigma_lower is not None or sigma_upper is not None
+        if asymmetric and (sigma_lower is None or sigma_upper is None):
+            raise ValueError("sigma_lower and sigma_upper must be given together")
+        if asymmetric and sigma is not None:
+            raise ValueError("Give either sigma (symmetric) or sigma_lower/sigma_upper, not both")
+        if asymmetric:
+            s_lo = _as_2d("sigma_lower", sigma_lower, (n, d))
+            s_hi = _as_2d("sigma_upper", sigma_upper, (n, d))
+        elif sigma is None:
             s_lo = np.zeros((n, d))
             s_hi = np.zeros((n, d))
-        elif isinstance(sigma, tuple) and len(sigma) == 2:
-            s_lo = _as_2d("sigma[0]", sigma[0], (n, d))
-            s_hi = _as_2d("sigma[1]", sigma[1], (n, d))
         else:
             s_lo = _as_2d("sigma", sigma, (n, d))
             s_hi = s_lo.copy()
@@ -477,6 +494,10 @@ class CorrelationData:
         *,
         x_err: ArrayLike | None = None,
         y_err: ArrayLike | None = None,
+        x_err_lower: ArrayLike | None = None,
+        x_err_upper: ArrayLike | None = None,
+        y_err_lower: ArrayLike | None = None,
+        y_err_upper: ArrayLike | None = None,
         x_censoring: ArrayLike | None = None,
         y_censoring: ArrayLike | None = None,
         names: list[str] | None = None,
@@ -488,8 +509,12 @@ class CorrelationData:
         x, y : array_like of shape (n_points,)
             The two variables.
         x_err, y_err : array_like, optional
-            Uncertainties on ``x`` and ``y``; scalar, ``(n_points,)`` or a 2-tuple of
-            such arrays for asymmetric errors. ``None`` means exact.
+            Symmetric uncertainties on ``x`` and ``y``; scalar or ``(n_points,)``.
+            ``None`` means exact.
+        x_err_lower, x_err_upper, y_err_lower, y_err_upper : array_like, optional
+            Asymmetric uncertainties (below and above the value) on ``x`` and ``y``;
+            scalar or ``(n_points,)``. Lower and upper must be given together for a
+            variable and cannot be combined with that variable's symmetric ``*_err``.
         x_censoring, y_censoring : array_like, optional
             Per-point censoring flags (see :class:`CorrelationData`).
         names : list of str, optional
@@ -502,21 +527,30 @@ class CorrelationData:
         n = x.size
         values = np.column_stack((x, y))
 
-        def _col(err: Any) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        def _col(
+            label: str, err: Any, err_lo: Any, err_hi: Any
+        ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+            if (err_lo is None) != (err_hi is None):
+                raise ValueError(f"{label}_err_lower and {label}_err_upper must be given together")
+            if err_lo is not None and err is not None:
+                raise ValueError(
+                    f"Give either {label}_err or {label}_err_lower/{label}_err_upper, not both"
+                )
+            if err_lo is not None:
+                return (
+                    np.broadcast_to(np.asarray(err_lo, float), (n,)).copy(),
+                    np.broadcast_to(np.asarray(err_hi, float), (n,)).copy(),
+                )
             if err is None:
                 z = np.zeros(n)
                 return z, z.copy()
-            if isinstance(err, tuple) and len(err) == 2:
-                return (
-                    np.broadcast_to(np.asarray(err[0], float), (n,)).copy(),
-                    np.broadcast_to(np.asarray(err[1], float), (n,)).copy(),
-                )
             e = np.broadcast_to(np.asarray(err, float), (n,)).copy()
             return e, e.copy()
 
-        xl, xu = _col(x_err)
-        yl, yu = _col(y_err)
-        sigma = (np.column_stack((xl, yl)), np.column_stack((xu, yu)))
+        xl, xu = _col("x", x_err, x_err_lower, x_err_upper)
+        yl, yu = _col("y", y_err, y_err_lower, y_err_upper)
+        sigma_lower = np.column_stack((xl, yl))
+        sigma_upper = np.column_stack((xu, yu))
         censoring = None
         if x_censoring is not None or y_censoring is not None:
             xc = (
@@ -530,4 +564,10 @@ class CorrelationData:
                 else np.asarray(y_censoring, object)
             )
             censoring = np.column_stack((np.broadcast_to(xc, (n,)), np.broadcast_to(yc, (n,))))
-        return cls(values, sigma=sigma, censoring=censoring, names=names or ["x", "y"])
+        return cls(
+            values,
+            sigma_lower=sigma_lower,
+            sigma_upper=sigma_upper,
+            censoring=censoring,
+            names=names or ["x", "y"],
+        )

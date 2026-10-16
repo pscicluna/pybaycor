@@ -15,6 +15,7 @@ figure is extracted from that object with :func:`_figure_from`.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -258,10 +259,43 @@ def _draw_censoring(
             line.set_linestyle("--")
 
 
+@dataclass
+class _PosteriorSummary:
+    """Posterior quantities needed by every panel of :func:`plot_data`, computed once."""
+
+    mu: NDArray[np.float64]  # posterior mean of mu, (n_dim,)
+    cov: NDArray[np.float64]  # posterior mean of cov, (n_dim, n_dim)
+    vals_mean: NDArray[np.float64] | None  # posterior mean of vals, (n_points, n_dim)
+    vals_sd: NDArray[np.float64] | None
+    mu_draws: NDArray[np.float64] | None  # (n_draws, n_dim) subset for the extra ellipses
+    cov_draws: NDArray[np.float64] | None
+
+    @classmethod
+    def from_posterior(
+        cls, post: xr.Dataset, *, with_vals: bool, n_ellipses: int, rng: np.random.Generator
+    ) -> _PosteriorSummary:
+        sdims = _sample_dims(post["mu"])
+        mu = post["mu"].mean(sdims).to_numpy()
+        cov = post["cov"].mean(sdims).to_numpy()
+        vals_mean = vals_sd = None
+        if with_vals and "vals" in post:
+            vals_mean = post["vals"].mean(sdims).to_numpy()
+            vals_sd = post["vals"].std(sdims).to_numpy()
+        mu_draws = cov_draws = None
+        if n_ellipses > 0:
+            mu_s = post["mu"].stack(sample=sdims).transpose("sample", ...)
+            cov_s = post["cov"].stack(sample=sdims).transpose("sample", ...)
+            n_samples = mu_s.sizes["sample"]
+            picks = np.sort(rng.choice(n_samples, size=min(n_ellipses, n_samples), replace=False))
+            mu_draws = mu_s.isel(sample=picks).to_numpy()
+            cov_draws = cov_s.isel(sample=picks).to_numpy()
+        return cls(mu, cov, vals_mean, vals_sd, mu_draws, cov_draws)
+
+
 def _draw_panel(
     ax: Axes,
     data: CorrelationData,
-    post: xr.Dataset,
+    summ: _PosteriorSummary,
     info: ModelInfo,
     i: int,
     j: int,
@@ -269,11 +303,8 @@ def _draw_panel(
     plot_input: bool,
     plot_fitted: bool,
     prob: float,
-    n_ellipses: int,
-    rng: np.random.Generator,
     color_input: str,
     color_fitted: str,
-    with_labels: bool,
     scatter_kwargs: dict[str, Any],
 ) -> None:
     """Draw the pair (x = variable ``i``, y = variable ``j``) into ``ax``."""
@@ -282,23 +313,19 @@ def _draw_panel(
 
     x = _plot_positions(data, i)
     y = _plot_positions(data, j)
-    lab = (lambda s: s) if with_labels else (lambda s: None)
-    sdims = _sample_dims(post["mu"])
 
     if plot_input:
         censored = data.is_censored[:, i] | data.is_censored[:, j]
-        kw = {"s": 22, "zorder": 3, **scatter_kwargs}
+        # User keyword arguments override the defaults, including the colour.
+        kw = {"s": 22, "zorder": 3, "color": color_input, **scatter_kwargs}
         if np.any(~censored):
-            ax.scatter(x[~censored], y[~censored], color=color_input, label=lab("data"), **kw)
+            ax.scatter(x[~censored], y[~censored], label="data", **kw)
         if np.any(censored):
-            ax.scatter(
-                x[censored],
-                y[censored],
-                facecolors="none",
-                edgecolors=color_input,
-                label=lab("censored (limit)"),
-                **kw,
-            )
+            kw_open = dict(kw)
+            edge = kw_open.pop("color")
+            kw_open.setdefault("facecolors", "none")
+            kw_open.setdefault("edgecolors", edge)
+            ax.scatter(x[censored], y[censored], label="censored (limit)", **kw_open)
         unc = data.is_uncertain[:, i] | data.is_uncertain[:, j]
         if np.any(unc):
             xerr = np.vstack((data.sigma_lower[unc, i], data.sigma_upper[unc, i]))
@@ -317,10 +344,9 @@ def _draw_panel(
         if data.has_censoring:
             _draw_censoring(ax, data, i, j, color_input)
 
-    if plot_fitted and info.has_latent and "vals" in post:
-        vals = post["vals"]
-        mean = vals.mean(sdims).to_numpy()
-        sd = vals.std(sdims).to_numpy()
+    if plot_fitted and info.has_latent and summ.vals_mean is not None:
+        mean = summ.vals_mean
+        sd = summ.vals_sd
         latent = data.is_latent[:, i] | data.is_latent[:, j]
         if np.any(latent):
             mx, my = mean[latent, i], mean[latent, j]
@@ -343,20 +369,15 @@ def _draw_panel(
                 elinewidth=0.8,
                 alpha=0.6,
                 zorder=4,
-                label=lab("inferred true values"),
+                label="inferred true values",
             )
 
     # Posterior-mean density ellipse (+ optional draws to show its uncertainty).
-    mu = post["mu"].mean(sdims).to_numpy()
-    cov = post["cov"].mean(sdims).to_numpy()
     sel = [i, j]
-    centre, width, height, angle = _ellipse_params(mu[sel], cov[np.ix_(sel, sel)], prob)
-    if n_ellipses > 0:
-        mu_s = post["mu"].stack(sample=sdims).transpose("sample", ...).to_numpy()
-        cov_s = post["cov"].stack(sample=sdims).transpose("sample", ...).to_numpy()
-        picks = rng.choice(mu_s.shape[0], size=min(n_ellipses, mu_s.shape[0]), replace=False)
-        for k in picks:
-            c, w, h, a = _ellipse_params(mu_s[k][sel], cov_s[k][np.ix_(sel, sel)], prob)
+    centre, width, height, angle = _ellipse_params(summ.mu[sel], summ.cov[np.ix_(sel, sel)], prob)
+    if summ.mu_draws is not None and summ.cov_draws is not None:
+        for mu_k, cov_k in zip(summ.mu_draws, summ.cov_draws, strict=True):
+            c, w, h, a = _ellipse_params(mu_k[sel], cov_k[np.ix_(sel, sel)], prob)
             ax.add_patch(
                 Ellipse(c, w, h, angle=a, fill=False, ec=color_fitted, lw=0.5, alpha=0.3, zorder=0)
             )
@@ -372,7 +393,7 @@ def _draw_panel(
             alpha=0.25,
             lw=1.5,
             zorder=0,
-            label=lab(label),
+            label=label,
         )
     )
     ax.autoscale_view()
@@ -437,7 +458,8 @@ def plot_data(
     show : bool, default False
         Call :func:`matplotlib.pyplot.show`.
     color_input, color_fitted : str
-        Colours of the input data and of the inferred values/ellipse.
+        Colours of the input data and of the inferred values/ellipse. A ``color=`` entry
+        in ``kwargs`` overrides ``color_input`` for the input points.
     random_seed : int, optional
         Seed for the choice of posterior draws when ``n_ellipses > 0``.
     **kwargs
@@ -453,12 +475,13 @@ def plot_data(
     n_dim = data.n_dim
     names = list(data.names)
     rng = np.random.default_rng(random_seed)
+    summ = _PosteriorSummary.from_posterior(
+        post, with_vals=plot_fitted and info.has_latent, n_ellipses=n_ellipses, rng=rng
+    )
     common = {
         "plot_input": plot_input,
         "plot_fitted": plot_fitted,
         "prob": prob,
-        "n_ellipses": n_ellipses,
-        "rng": rng,
         "color_input": color_input,
         "color_fitted": color_fitted,
         "scatter_kwargs": kwargs,
@@ -470,7 +493,7 @@ def plot_data(
         else:
             ax = np.asarray(axes, dtype=object).ravel()[0]
             fig = ax.figure
-        _draw_panel(ax, data, post, info, 0, 1, with_labels=True, **common)
+        _draw_panel(ax, data, summ, info, 0, 1, **common)
         ax.set_xlabel(names[0])
         ax.set_ylabel(names[1])
         ax.legend(loc="best", fontsize="small")
@@ -496,7 +519,7 @@ def plot_data(
             if c > r:
                 ax.set_axis_off()
                 continue
-            _draw_panel(ax, data, post, info, c, r + 1, with_labels=True, **common)
+            _draw_panel(ax, data, summ, info, c, r + 1, **common)
             if r == m - 1:
                 ax.set_xlabel(names[c])
             if c == 0:
@@ -577,6 +600,6 @@ def plot_corner(
             visuals = dict(kwargs.pop("visuals", None) or {})
             try:
                 pc = az.plot_pair(ds, visuals={"point_estimate": True, **visuals}, **kwargs)
-            except Exception:  # point-estimate marker unsupported by this ArviZ
+            except (TypeError, ValueError, KeyError):  # marker unsupported by this ArviZ
                 pc = az.plot_pair(ds, visuals=visuals or None, **kwargs)
     return _finish(_figure_from(pc), plotfile, show)

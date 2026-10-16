@@ -9,7 +9,7 @@ which parts of the model are switched on:
 | --- | --- |
 | `data` only | classic correlation on exact data |
 | `sigma=` | measurement uncertainties; `0`/`NaN` entries stay exact |
-| `sigma=(lo, hi)` | asymmetric (two-piece Normal) uncertainties |
+| `sigma_lower=`, `sigma_upper=` | asymmetric (two-piece Normal) uncertainties; exclusive with `sigma` |
 | `censoring=` or `lower=`/`upper=` | per-entry censoring (upper limit, lower limit, interval) |
 | `robust=True` | multivariate Student-t instead of Normal |
 | `error_scale=True` | per-variable rescaling of the quoted uncertainties |

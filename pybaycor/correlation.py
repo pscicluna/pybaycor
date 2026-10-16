@@ -16,7 +16,7 @@ from numpy.typing import ArrayLike
 
 from .data import CorrelationData, Standardisation
 from .inference import Method, NutsSampler, fit_model
-from .model import build_model
+from .model import ModelInfo, build_model, set_model_values
 from .stats import bayes_factor, correlation_samples, correlation_summary
 
 __all__ = [
@@ -44,10 +44,17 @@ class BayesianCorrelation:
         The data. Either ``data`` or both ``x`` and ``y`` must be given.
     x, y : array_like of shape (n_points,), optional
         Convenience inputs for two-variable data sets.
-    sigma : array_like or 2-tuple of array_like, optional
-        Measurement uncertainties: scalar, ``(n_dim,)``, or ``(n_points, n_dim)``.
-        ``0``/``NaN`` entries are exact. A tuple ``(lower, upper)`` gives asymmetric
-        uncertainties. Omit for data without measurement errors.
+    sigma : array_like, optional
+        Symmetric measurement uncertainties: scalar, ``(n_dim,)`` (one per variable),
+        or ``(n_points, n_dim)``. ``0``/``NaN`` entries are exact. Omit for data without
+        measurement errors.
+    sigma_lower, sigma_upper : array_like, optional
+        Asymmetric uncertainties below and above each value (two-piece Normal errors),
+        same shape rules as ``sigma``; give both, and not ``sigma``.
+    x_err, y_err : array_like, optional
+        With ``x``/``y``: symmetric uncertainties per axis (scalar or ``(n_points,)``).
+        For asymmetric per-axis errors build the data with
+        :meth:`CorrelationData.from_xy` and pass the result as ``data``.
     censoring : array_like, optional
         Per-entry censoring flags: ``0``/``"observed"``, ``-1``/``"upper"`` (value is an
         upper limit), ``1``/``"lower"`` (value is a lower limit), ``2``/``"interval"``.
@@ -69,9 +76,10 @@ class BayesianCorrelation:
     ndim : int, optional
         Deprecated; the number of variables is taken from the data.
     mu_prior, sigma_prior : optional
-        Deprecated pybaycor ≤ 0.2 prior specification ``[mean, sd]`` for the Normal prior
-        on ``mu`` and ``beta`` for the half-Cauchy prior on the standard deviations,
-        in data units. Giving either disables standardisation.
+        Deprecated pybaycor ≤ 0.2 prior specification: ``[mean, sd]`` (or a ``(2, n_dim)``
+        array of per-variable means and sds) for the Normal prior on ``mu``, and
+        ``beta`` (scalar or one per variable) for the half-Cauchy prior on the standard
+        deviations, in data units. Giving either disables standardisation.
 
     Attributes
     ----------
@@ -102,7 +110,11 @@ class BayesianCorrelation:
         *,
         x: ArrayLike | None = None,
         y: ArrayLike | None = None,
-        sigma: ArrayLike | tuple[ArrayLike, ArrayLike] | None = None,
+        sigma: ArrayLike | None = None,
+        sigma_lower: ArrayLike | None = None,
+        sigma_upper: ArrayLike | None = None,
+        x_err: ArrayLike | None = None,
+        y_err: ArrayLike | None = None,
         censoring: ArrayLike | None = None,
         lower: ArrayLike | None = None,
         upper: ArrayLike | None = None,
@@ -116,20 +128,59 @@ class BayesianCorrelation:
         sigma_prior: float | ArrayLike | None = None,
     ) -> None:
         if isinstance(data, CorrelationData):
+            extras = {
+                "x": x,
+                "y": y,
+                "sigma": sigma,
+                "sigma_lower": sigma_lower,
+                "sigma_upper": sigma_upper,
+                "x_err": x_err,
+                "y_err": y_err,
+                "censoring": censoring,
+                "lower": lower,
+                "upper": upper,
+                "names": names,
+            }
+            given = [k for k, v in extras.items() if v is not None]
+            if given:
+                raise ValueError(
+                    "data is already a CorrelationData, so these arguments would be ignored: "
+                    f"{given}; build the CorrelationData with them instead"
+                )
             cdata = data
         else:
             if data is None:
                 if x is None or y is None:
                     raise ValueError("Either data must be given as input, or both x and y")
-                data = np.column_stack((np.asarray(x, float).ravel(), np.asarray(y, float).ravel()))
+                x = np.asarray(x, float).ravel()
+                y = np.asarray(y, float).ravel()
+                if x.shape != y.shape:
+                    raise ValueError("x and y must have the same length")
+                data = np.column_stack((x, y))
                 if names is None:
                     names = ["x", "y"]
+                if x_err is not None or y_err is not None:
+                    if sigma is not None or sigma_lower is not None or sigma_upper is not None:
+                        raise ValueError("Give either x_err/y_err or sigma, not both")
+                    n = x.size
+                    xe = np.asarray(0.0 if x_err is None else x_err, float)
+                    ye = np.asarray(0.0 if y_err is None else y_err, float)
+                    sigma = np.column_stack((np.broadcast_to(xe, (n,)), np.broadcast_to(ye, (n,))))
+            elif x is not None or y is not None or x_err is not None or y_err is not None:
+                raise ValueError("x/y/x_err/y_err cannot be combined with data")
             if ndim is not None:
                 arr = np.asarray(data)
                 if arr.ndim != 2 or arr.shape[1] != ndim:
                     raise ValueError("Data must have the same number of features and ndim")
             cdata = CorrelationData(
-                data, sigma=sigma, censoring=censoring, lower=lower, upper=upper, names=names
+                data,
+                sigma=sigma,
+                sigma_lower=sigma_lower,
+                sigma_upper=sigma_upper,
+                censoring=censoring,
+                lower=lower,
+                upper=upper,
+                names=names,
             )
 
         priors = dict(priors or {})
@@ -143,10 +194,27 @@ class BayesianCorrelation:
             )
             standardize = False
             if mu_prior is not None:
-                mp = np.asarray(mu_prior, dtype=float).ravel()
-                priors.setdefault("mu", (float(mp[0]), float(mp[1])))
+                mp = np.asarray(mu_prior, dtype=float)
+                if mp.shape == (2,):
+                    priors.setdefault("mu", (float(mp[0]), float(mp[1])))
+                elif mp.ndim == 2 and mp.shape[0] == 2 and mp.shape[1] == cdata.n_dim:
+                    priors.setdefault("mu", (mp[0], mp[1]))
+                else:
+                    raise ValueError(
+                        "mu_prior must be [mean, sd] or a (2, n_dim) array of per-variable "
+                        f"means and sds; got shape {mp.shape}"
+                    )
             if sigma_prior is not None:
-                priors.setdefault("sigma", float(np.asarray(sigma_prior, dtype=float).ravel()[0]))
+                sp = np.asarray(sigma_prior, dtype=float)
+                if sp.size == 1:
+                    priors.setdefault("sigma", float(sp.ravel()[0]))
+                elif sp.shape == (cdata.n_dim,):
+                    priors.setdefault("sigma", sp)
+                else:
+                    raise ValueError(
+                        "sigma_prior must be a scalar or have one entry per variable; "
+                        f"got shape {sp.shape}"
+                    )
 
         self.data: CorrelationData = cdata
         self.robust = bool(robust)
@@ -160,6 +228,8 @@ class BayesianCorrelation:
             error_scale=self.error_scale,
             standardize=self.standardize,
         )
+        # build_model drops the error-scale factors when there are no uncertainties.
+        self.error_scale = self.info.error_scale
         self.trace: xr.DataTree | None = None
         self.summary: pd.DataFrame | None = None
         self.approx: Any = None
@@ -451,6 +521,7 @@ class BayesianCorrelation:
             priors=self.priors,
             error_scale=self.error_scale,
             standardize=self.standardize,
+            transform=self.info.transform,
             independent=True,
         )
         null_idata, _ = fit_model(
@@ -473,6 +544,8 @@ class BayesianCorrelation:
         d = self.data
         n, k = d.shape
         stats = np.empty(n_sim)
+        sim_model: Any = None
+        sim_info: ModelInfo | None = None
         for s in range(n_sim):
             idx = int(rng.integers(n_samp))
             true = rng.normal(size=(n, k)) * sd_s[idx] + mu_s[idx]
@@ -489,18 +562,26 @@ class BayesianCorrelation:
             sim = np.where(d.is_censored, d.values, sim)
             sim_data = CorrelationData(
                 sim,
-                sigma=(d.sigma_lower, d.sigma_upper),
+                sigma_lower=d.sigma_lower,
+                sigma_upper=d.sigma_upper,
                 lower=np.where(np.isfinite(d.lower), d.lower, np.nan),
                 upper=np.where(np.isfinite(d.upper), d.upper, np.nan),
                 names=d.names,
             )
-            sim_model, _ = build_model(
-                sim_data,
-                robust=self.robust,
-                priors=self.priors,
-                error_scale=self.error_scale,
-                standardize=self.standardize,
-            )
+            if sim_model is None:
+                # The simulated data sets share the uncertainty and censoring pattern of
+                # the real data, so one model with mutable values serves all of them.
+                sim_model, sim_info = build_model(
+                    sim_data,
+                    robust=self.robust,
+                    priors=self.priors,
+                    error_scale=self.error_scale,
+                    standardize=self.standardize,
+                    transform=self.info.transform,
+                    mutable_values=True,
+                )
+            else:
+                set_model_values(sim_model, sim_info, sim_data)
             sim_idata, _ = fit_model(
                 sim_model,
                 method=method,
@@ -637,11 +718,15 @@ class HierarchicalBayesianCorrelation(BayesianCorrelation):
     """
 
     def __init__(self, data: ArrayLike, sigma: ArrayLike, **kwargs: Any) -> None:
-        if sigma is None:
-            raise ValueError("sigma is required for the hierarchical models")
-        sig = np.asarray(sigma, dtype=float) if not isinstance(sigma, tuple) else None
-        if sig is not None and np.any(sig <= 0):
-            raise ValueError("Uncertainties must be positive real numbers!")
+        asym = kwargs.get("sigma_lower") is not None and kwargs.get("sigma_upper") is not None
+        if sigma is None and not asym:
+            raise ValueError(
+                "sigma is required for the hierarchical models (or give sigma_lower and "
+                "sigma_upper for asymmetric uncertainties)"
+            )
+        for s in (sigma, kwargs.get("sigma_lower"), kwargs.get("sigma_upper")):
+            if s is not None and np.any(np.asarray(s, dtype=float) <= 0):
+                raise ValueError("Uncertainties must be positive real numbers!")
         super().__init__(data, sigma=sigma, **kwargs)
 
 

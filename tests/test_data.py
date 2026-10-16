@@ -103,7 +103,7 @@ class TestSigma:
         lo = np.full(x.shape, 0.1)
         hi = np.full(x.shape, 0.3)
         hi[0, 0] = 0.1  # one symmetric entry
-        cd = CorrelationData(x, sigma=(lo, hi))
+        cd = CorrelationData(x, sigma_lower=lo, sigma_upper=hi)
         np.testing.assert_array_equal(cd.sigma_lower, lo)
         np.testing.assert_array_equal(cd.sigma_upper, hi)
         assert cd.is_asymmetric.sum() == 35
@@ -111,22 +111,45 @@ class TestSigma:
         np.testing.assert_allclose(cd.sigma, 0.5 * (lo + hi))
         assert cd.is_uncertain.all()
 
-    def test_tuple_sigma_broadcasts(self, x):
-        cd = CorrelationData(x, sigma=(0.1, [0.2, 0.3, 0.4]))
+    def test_asymmetric_sigma_broadcasts(self, x):
+        cd = CorrelationData(x, sigma_lower=0.1, sigma_upper=[0.2, 0.3, 0.4])
         np.testing.assert_array_equal(cd.sigma_lower, 0.1)
         np.testing.assert_array_equal(cd.sigma_upper[:, 2], 0.4)
+
+    def test_tuple_sigma_is_symmetric_per_variable(self, x):
+        # A tuple is just a sequence: one symmetric value per variable, never (lo, hi).
+        cd = CorrelationData(x, sigma=(0.1, 0.2, 0.3))
+        assert not cd.is_asymmetric.any()
+        np.testing.assert_array_equal(cd.sigma[:, 2], 0.3)
+
+    def test_asymmetric_requires_both_bounds(self, x):
+        with pytest.raises(ValueError, match="given together"):
+            CorrelationData(x, sigma_lower=0.1)
+        with pytest.raises(ValueError, match="given together"):
+            CorrelationData(x, sigma_upper=0.1)
+
+    def test_asymmetric_excludes_symmetric(self, x):
+        with pytest.raises(ValueError, match="not both"):
+            CorrelationData(x, sigma=0.1, sigma_lower=0.1, sigma_upper=0.2)
+
+    def test_1d_sigma_ambiguous_when_square(self, rng):
+        square = rng.normal(size=(3, 3))
+        with pytest.raises(ValueError, match="2-D"):
+            CorrelationData(square, sigma=[0.1, 1.0, 10.0])
+        cd = CorrelationData(square, sigma=np.full((3, 3), 0.1))
+        assert cd.is_uncertain.all()
 
     def test_mixed_zero_positive_asymmetric_raises(self, x):
         lo = np.zeros(x.shape)
         hi = np.full(x.shape, 0.3)
         with pytest.raises(ValueError, match=r"both zero .* or both positive"):
-            CorrelationData(x, sigma=(lo, hi))
+            CorrelationData(x, sigma_lower=lo, sigma_upper=hi)
 
     def test_tuple_sigma_both_zero_is_exact(self, x):
         lo = np.full(x.shape, 0.2)
         hi = np.full(x.shape, 0.4)
         lo[2, 1] = hi[2, 1] = 0.0
-        cd = CorrelationData(x, sigma=(lo, hi))
+        cd = CorrelationData(x, sigma_lower=lo, sigma_upper=hi)
         assert cd.is_exact[2, 1]
         assert cd.n_exact == 1
 
@@ -390,7 +413,13 @@ class TestDescribe:
         hib = np.full(x.shape, np.nan)
         lob[8, 2], hib[8, 2] = -1.0, 1.0
         cd = CorrelationData(
-            x, sigma=(lo, hi), censoring=cens, lower=lob, upper=hib, names=["a", "b", "c"]
+            x,
+            sigma_lower=lo,
+            sigma_upper=hi,
+            censoring=cens,
+            lower=lob,
+            upper=hib,
+            names=["a", "b", "c"],
         )
         text = cd.describe()
         assert "12 points x 3 variables" in text
@@ -422,13 +451,20 @@ class TestFromXY:
         np.testing.assert_array_equal(cd.sigma[:, 1], yerr)
         assert not cd.is_asymmetric.any()
 
-    def test_asymmetric_tuple_errors(self, rng):
+    def test_asymmetric_errors(self, rng):
         xv, yv = rng.normal(size=10), rng.normal(size=10)
-        cd = CorrelationData.from_xy(xv, yv, x_err=(0.1, 0.3), y_err=None)
+        cd = CorrelationData.from_xy(xv, yv, x_err_lower=0.1, x_err_upper=0.3, y_err=None)
         np.testing.assert_array_equal(cd.sigma_lower[:, 0], 0.1)
         np.testing.assert_array_equal(cd.sigma_upper[:, 0], 0.3)
         assert cd.is_asymmetric[:, 0].all()
         assert cd.is_exact[:, 1].all()
+
+    def test_asymmetric_errors_validation(self, rng):
+        xv, yv = rng.normal(size=10), rng.normal(size=10)
+        with pytest.raises(ValueError, match="given together"):
+            CorrelationData.from_xy(xv, yv, y_err_lower=0.1)
+        with pytest.raises(ValueError, match="not both"):
+            CorrelationData.from_xy(xv, yv, x_err=0.2, x_err_lower=0.1, x_err_upper=0.3)
 
     def test_censoring(self, rng):
         xv, yv = rng.normal(size=10), rng.normal(size=10)
@@ -535,7 +571,9 @@ class TestStandardisation:
         hi[0, 0] = 0.5
         lo[1, 1] = -0.5
         lo[2, 2], hi[2, 2] = -1.0, 1.0
-        cd = CorrelationData(x, sigma=(sig_lo, sig_hi), lower=lo, upper=hi, names=["a", "b", "c"])
+        cd = CorrelationData(
+            x, sigma_lower=sig_lo, sigma_upper=sig_hi, lower=lo, upper=hi, names=["a", "b", "c"]
+        )
         st = Standardisation(np.array([1.0, -2.0, 0.5]), np.array([2.0, 4.0, 0.5]))
         z = cd.standardised(st)
         assert isinstance(z, CorrelationData)

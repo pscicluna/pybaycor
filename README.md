@@ -75,12 +75,18 @@ bc = pbc.BayesianCorrelation(data, sigma=sigma)  # sigma: (n_points, n_dim), sca
 
 Entries of `sigma` that are `0` or `NaN` are treated as exact, so a variable without
 uncertainties is simply a column of zeros, and a data set where only some points have
-error bars needs no special treatment. Asymmetric uncertainties use a two-piece
-Normal error model:
+error bars needs no special treatment. A 1-D `sigma` always means one value per
+variable (when the data have as many points as variables a 2-D array is required).
+Asymmetric uncertainties use a two-piece Normal error model:
 
 ```python
-bc = pbc.BayesianCorrelation(data, sigma=(sigma_lower, sigma_upper))
+bc = pbc.BayesianCorrelation(data, sigma_lower=sigma_lower, sigma_upper=sigma_upper)
 ```
+
+Both arrays follow the same shape rules as `sigma`; `sigma` and the asymmetric pair are
+mutually exclusive, so the choice of error model is always explicit. For two 1-D
+arrays, `BayesianCorrelation(x=x, y=y, x_err=..., y_err=...)` or
+`CorrelationData.from_xy(x, y, x_err_lower=..., x_err_upper=..., ...)` do the stacking.
 
 If the quoted error bars may be globally under- or over-estimated, `error_scale=True`
 infers a correction factor per variable (identifiable only when the quoted
@@ -141,6 +147,9 @@ simulate, refit) is available through `bc.null_pvalue()`; it is expensive.
 * `RobustBayesianCorrelation`, `HierarchicalBayesianCorrelation` and
   `HierarchicalRobustBayesianCorrelation` still exist and behave as before, but are
   thin wrappers: `BayesianCorrelation(data, sigma=..., robust=True)` is equivalent.
+* All constructor arguments after `data` (and `sigma` for the hierarchical classes)
+  are keyword-only; positional calls such as `BayesianCorrelation(None, x, y)` must
+  become `BayesianCorrelation(x=x, y=y)`.
 * `fit(steps=...)` is now `fit(draws=...)`; the return value is an `xarray.DataTree`.
 * Summary rows are labelled by variable name (`chol_corr[x, y]`).
 * `mu_prior`/`sigma_prior` still work but are deprecated in favour of `priors=`.

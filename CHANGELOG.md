@@ -25,6 +25,11 @@ A ground-up modernisation. See `ROADMAP.md` for the analysis and the plan.
   asked, and save with `savefig` (the old code called the non-existent `plt.save`).
 - `seaborn` is no longer a dependency.
 - The module `pybaycor.pybaycor` is deprecated; import from `pybaycor`.
+- All constructor arguments after `data` (after `sigma` for the hierarchical classes)
+  are keyword-only; positional calls such as `BayesianCorrelation(None, x, y)` raise
+  `TypeError` and must become `BayesianCorrelation(x=x, y=y)`.
+- A 1-D `sigma` always means one value per variable; when `n_points == n_dim` a 2-D
+  array is required to avoid ambiguity.
 
 ### Added
 
@@ -32,8 +37,9 @@ A ground-up modernisation. See `ROADMAP.md` for the analysis and the plan.
   the multivariate Student-t; `sigma=` adds measurement uncertainties to any subset of
   entries (variables with and without uncertainties, and points with and without
   uncertainties, can be mixed); heteroscedastic (per-point) uncertainties; asymmetric
-  uncertainties via `sigma=(lower, upper)`
-  ([#5](https://github.com/pscicluna/pybaycor/issues/5)).
+  uncertainties via the explicit `sigma_lower=`/`sigma_upper=` pair
+  ([#5](https://github.com/pscicluna/pybaycor/issues/5)); `x_err`/`y_err` for the
+  `x=`/`y=` form; per-variable `priors["mu"]`/`priors["sigma"]`.
 - Censored data: upper limits, lower limits and interval censoring, specified per
   entry with `censoring=` flags or `lower=`/`upper=` bound arrays, with or without
   measurement uncertainty on the censored entries.
