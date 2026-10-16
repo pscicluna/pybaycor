@@ -30,29 +30,27 @@ UPPER_LIMIT = -1  # true value <= quoted value (left-censored)
 LOWER_LIMIT = 1  # true value >= quoted value (right-censored)
 INTERVAL = 2  # lower <= true value <= upper
 
-_CENSORING_ALIASES: dict[Any, int] = {
-    0: OBSERVED,
-    "0": OBSERVED,
+_CENSORING_CODES = (OBSERVED, UPPER_LIMIT, LOWER_LIMIT, INTERVAL)
+
+# Textual spellings of the flags (lower-case, stripped). Numbers are parsed separately.
+_CENSORING_ALIASES: dict[str, int] = {
     "none": OBSERVED,
     "observed": OBSERVED,
     "obs": OBSERVED,
     "detected": OBSERVED,
-    -1: UPPER_LIMIT,
-    "-1": UPPER_LIMIT,
+    "false": OBSERVED,
+    "nan": OBSERVED,
     "upper": UPPER_LIMIT,
     "upper_limit": UPPER_LIMIT,
     "upperlimit": UPPER_LIMIT,
     "left": UPPER_LIMIT,
     "<": UPPER_LIMIT,
-    1: LOWER_LIMIT,
-    "1": LOWER_LIMIT,
+    "true": UPPER_LIMIT,
     "lower": LOWER_LIMIT,
     "lower_limit": LOWER_LIMIT,
     "lowerlimit": LOWER_LIMIT,
     "right": LOWER_LIMIT,
     ">": LOWER_LIMIT,
-    2: INTERVAL,
-    "2": INTERVAL,
     "interval": INTERVAL,
 }
 
@@ -85,47 +83,67 @@ def _as_2d(name: str, arr: ArrayLike, shape: tuple[int, int] | None = None) -> N
     return np.array(out, dtype=float, copy=True)
 
 
+def _censoring_code(text: str) -> int | None:
+    """Return the code for one normalised flag spelling, or ``None`` if unrecognised."""
+    if text in _CENSORING_ALIASES:
+        return _CENSORING_ALIASES[text]
+    try:
+        value = float(text)
+    except ValueError:
+        return None
+    if np.isnan(value):
+        return OBSERVED
+    if value.is_integer() and int(value) in _CENSORING_CODES:
+        return int(value)
+    return None
+
+
 def _parse_censoring(censoring: ArrayLike, shape: tuple[int, int]) -> NDArray[np.int_]:
-    """Map user-facing censoring flags onto the canonical integer codes."""
-    raw = np.asarray(censoring, dtype=object)
+    """Map user-facing censoring flags onto the canonical integer codes.
+
+    Boolean and integer arrays are validated directly. Anything else (strings, floats,
+    mixed object arrays) is normalised to lower-case text and only the distinct
+    spellings are looked up, so the cost does not grow with the number of entries.
+    """
+    raw = np.asarray(censoring)
     if raw.ndim == 0:
-        raw = np.full(shape, raw.item(), dtype=object)
-    elif raw.ndim == 1 and raw.shape[0] == shape[0] and shape[1] == 1:
-        raw = raw[:, None]
-    elif raw.shape != shape:
+        raw = np.full(shape, raw.item())
+    if raw.shape != shape:
         raise ValueError(f"censoring has shape {raw.shape} but data has shape {shape}")
-    out = np.empty(shape, dtype=int)
-    for idx in np.ndindex(shape):
-        val = raw[idx]
-        if isinstance(val, (bool, np.bool_)):
-            # A boolean mask is interpreted as "this value is an upper limit".
-            out[idx] = UPPER_LIMIT if val else OBSERVED
-            continue
-        if isinstance(val, str):
-            key: Any = val.strip().lower()
-        elif isinstance(val, (int, np.integer)):
-            key = int(val)
-        elif isinstance(val, (float, np.floating)):
-            if np.isnan(val):
-                key = 0
-            elif float(val).is_integer():
-                key = int(val)
-            else:
-                key = val
-        else:
-            key = val
-        try:
-            out[idx] = _CENSORING_ALIASES[key]
-        except (KeyError, TypeError) as err:
-            raise ValueError(
-                f"Unrecognised censoring flag {val!r} at {idx}; use 0/'observed', "
-                "-1/'upper' (value is an upper limit), 1/'lower' (value is a lower limit) "
-                "or 2/'interval' (with lower= and upper= bounds)."
-            ) from err
-    return out
+
+    if raw.dtype.kind == "b":
+        # A boolean mask is interpreted as "this value is an upper limit".
+        return np.where(raw, UPPER_LIMIT, OBSERVED).astype(int)
+    if raw.dtype.kind in "iu":
+        out = raw.astype(int)
+        bad = ~np.isin(out, _CENSORING_CODES)
+        if bad.any():
+            idx = tuple(int(i) for i in np.argwhere(bad)[0])
+            raise ValueError(_bad_flag_message(raw[idx], idx))
+        return out
+
+    text = np.char.lower(np.char.strip(raw.astype(str)))
+    uniq, inverse = np.unique(text, return_inverse=True)
+    codes = np.empty(uniq.shape, dtype=int)
+    for k, spelling in enumerate(uniq):
+        code = _censoring_code(str(spelling))
+        if code is None:
+            idx = tuple(int(i) for i in np.argwhere(text == spelling)[0])
+            raise ValueError(_bad_flag_message(raw[idx], idx))
+        codes[k] = code
+    return codes[inverse].reshape(shape)
 
 
-@dataclass(frozen=True)
+def _bad_flag_message(value: Any, idx: tuple[int, ...]) -> str:
+    value = value.item() if hasattr(value, "item") else value
+    return (
+        f"Unrecognised censoring flag {value!r} at {idx}; use 0/'observed', "
+        "-1/'upper' (value is an upper limit), 1/'lower' (value is a lower limit) "
+        "or 2/'interval' (with lower= and upper= bounds)."
+    )
+
+
+@dataclass(frozen=True, eq=False)
 class Standardisation:
     """Per-variable affine transform ``z = (x - loc) / scale`` applied before fitting.
 
@@ -183,7 +201,7 @@ class Standardisation:
         return np.asarray(z, dtype=float) * self.scale + self.loc
 
 
-@dataclass
+@dataclass(eq=False)
 class CorrelationData:
     """Canonical container for a multivariate data set with uncertainties and censoring.
 

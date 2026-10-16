@@ -162,6 +162,12 @@ class TestConstruction:
         ):
             BayesianCorrelation(xy, sigma_prior=[1.0, 2.0, 3.0])
 
+    def test_correlation_data_equality_does_not_raise(self, xy):
+        cd = CorrelationData(xy)
+        assert cd == cd
+        assert not (cd == CorrelationData(xy))  # identity semantics, never a ValueError
+        assert cd.standardised(pbc.Standardisation.identity(2)) != cd
+
     def test_error_scale_without_uncertainties_is_reported(self, xy):
         with pytest.warns(UserWarning, match="error_scale=True has no effect"):
             bc = BayesianCorrelation(xy, error_scale=True)
@@ -295,7 +301,7 @@ class TestMapFit:
         assert df.loc["a~b", "sd"] == 0.0
         assert df.loc["a~b", "mean"] == pytest.approx(map_observed.correlation()[0])
         assert np.isnan(df.loc["a~b", "bf10"])  # degenerate single draw
-        df2 = map_observed.correlation_summary(names=["u", "v"], ci_kind="eti")
+        df2 = map_observed.correlation_summary(names=["u", "v"], ci_kind="eti", ci_prob=0.94)
         assert list(df2.index) == ["u~v"]
         assert "eti_3%" in df2.columns
 
@@ -353,6 +359,19 @@ class TestMapFit:
 
 
 # -------------------------------------------------------------- fit arguments
+class TestSummaryDefaults:
+    def test_correlation_summary_follows_arviz_rcparams(self, map_latent):
+        import arviz as az
+
+        df = map_latent.correlation_summary()
+        prob = float(az.rcParams["stats.ci_prob"])
+        kind = str(az.rcParams["stats.ci_kind"])
+        assert f"{kind}_{100 * (1 - prob) / 2:g}%" in df.columns
+        with az.rc_context({"stats.ci_prob": 0.5, "stats.ci_kind": "hdi"}):
+            df = map_latent.correlation_summary()
+        assert {"hdi_25%", "hdi_75%"} <= set(df.columns)
+
+
 class TestPlots:
     """Smoke tests of the plotting entry points on the cheap MAP fits."""
 
@@ -453,7 +472,36 @@ class TestLegacyClasses:
 
 
 # ------------------------------------------------------------------- package
+class TestBlackjaxWorkaround:
+    def test_context_restores_window_adaptation(self):
+        blackjax = pytest.importorskip("blackjax")
+        from pybaycor.inference import _blackjax_progress_bar_workaround
+
+        original = blackjax.window_adaptation
+        with _blackjax_progress_bar_workaround():
+            assert blackjax.window_adaptation is not original
+        assert blackjax.window_adaptation is original
+
+    def test_unrelated_errors_are_not_wrapped(self):
+        from pybaycor.inference import _raised_inside_blackjax_wrapper
+
+        try:
+            raise ValueError("plain")
+        except ValueError as err:
+            assert not _raised_inside_blackjax_wrapper(err)
+
+
 class TestPackage:
+    def test_legacy_submodule_attribute(self):
+        import pybaycor
+
+        with pytest.warns(DeprecationWarning, match="pybaycor.pybaycor is deprecated"):
+            sys.modules.pop("pybaycor.pybaycor", None)
+            legacy = pybaycor.pybaycor
+        assert legacy.BayesianCorrelation is BayesianCorrelation
+        with pytest.raises(AttributeError):
+            pybaycor.no_such_attribute  # noqa: B018
+
     def test_version(self):
         assert isinstance(pbc.__version__, str)
         assert pbc.__version__[0].isdigit()

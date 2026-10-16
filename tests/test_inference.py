@@ -30,7 +30,7 @@ def fit_nuts(bc, seed, draws=400, tune=400, chains=2, **kwargs):
 
 
 def corr_stats(bc):
-    df = bc.correlation_summary()
+    df = bc.correlation_summary(ci_prob=0.94, ci_kind="hdi")
     row = df.iloc[0]
     return float(row["mean"]), float(row["sd"]), float(row["hdi_3%"]), float(row["hdi_97%"])
 

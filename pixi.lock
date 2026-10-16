@@ -21955,7 +21955,7 @@ packages:
   - pandas>=2.0
   - pymc>=6.1
   - scipy>=1.11
-  - xarray>=2024.1
+  - xarray>=2024.10
   - blackjax>=1.2 ; extra == 'all'
   - jax>=0.4.30 ; extra == 'all'
   - numpyro>=0.15 ; extra == 'all'

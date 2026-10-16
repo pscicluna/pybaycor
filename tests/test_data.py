@@ -433,6 +433,48 @@ class TestDescribe:
         assert "limits" not in text
 
 
+class TestCensoringParser:
+    """The vectorised flag parser accepts the same spellings as the old per-entry loop."""
+
+    def test_object_array_with_mixed_spellings(self, x):
+        flags = np.zeros(x.shape, dtype=object)
+        flags[0, 0] = "Upper "
+        flags[1, 0] = -1.0
+        flags[2, 1] = "1"
+        flags[3, 1] = True
+        flags[4, 2] = None
+        flags[5, 2] = np.nan
+        flags[6, 2] = "<"
+        cd = CorrelationData(x, censoring=flags)
+        assert cd.censoring[0, 0] == UPPER_LIMIT
+        assert cd.censoring[1, 0] == UPPER_LIMIT
+        assert cd.censoring[2, 1] == LOWER_LIMIT
+        assert cd.censoring[3, 1] == UPPER_LIMIT
+        assert cd.censoring[4, 2] == OBSERVED
+        assert cd.censoring[5, 2] == OBSERVED
+        assert cd.censoring[6, 2] == UPPER_LIMIT
+        assert cd.n_censored == 5
+
+    def test_integer_array_fast_path_validates(self, x):
+        flags = np.zeros(x.shape, dtype=int)
+        flags[2, 1] = 7
+        with pytest.raises(ValueError, match=r"Unrecognised censoring flag 7 at \(2, 1\)"):
+            CorrelationData(x, censoring=flags)
+
+    def test_unknown_string_reports_position(self, x):
+        flags = np.full(x.shape, "observed", dtype=object)
+        flags[4, 0] = "maybe"
+        with pytest.raises(ValueError, match=r"'maybe' at \(4, 0\)"):
+            CorrelationData(x, censoring=flags)
+
+    def test_large_all_zero_is_fast(self):
+        big = np.random.default_rng(0).normal(size=(50_000, 4))
+        cd = CorrelationData(big, censoring=np.zeros(big.shape, dtype=int))
+        assert cd.n_censored == 0
+        cd = CorrelationData(big, censoring=np.full(big.shape, "observed"))
+        assert cd.n_censored == 0
+
+
 # ---------------------------------------------------------------------- from_xy
 class TestFromXY:
     def test_basic(self, rng):

@@ -29,7 +29,10 @@ Available methods
 
 from __future__ import annotations
 
+import contextlib
+import traceback
 import warnings
+from collections.abc import Iterator
 from typing import Any, Literal
 
 import numpy as np
@@ -60,27 +63,38 @@ def available_nuts_samplers() -> list[str]:
     return out
 
 
-def _patch_blackjax_window_adaptation() -> None:
-    """Work around a PyMC 6.3 bug in its blackjax wrapper.
+@contextlib.contextmanager
+def _blackjax_progress_bar_workaround() -> Iterator[None]:
+    """Work around a PyMC 6.3 bug in its blackjax wrapper, for the duration of a call.
 
     ``pymc.sampling.jax._blackjax_inference_loop`` forwards ``progress_bar`` to
     :func:`blackjax.window_adaptation` before removing it from the keyword arguments,
     and blackjax passes unknown keywords on to the NUTS kernel, which rejects them.
-    Dropping the keyword here keeps the back-end usable until the fix lands upstream.
+    The keyword is dropped inside this context only; ``blackjax.window_adaptation`` is
+    restored on exit so other users of blackjax in the process are unaffected.
     """
     import blackjax
 
     original = blackjax.window_adaptation
-    if getattr(original, "_pybaycor_patched", False):
-        return
 
     def window_adaptation(*args: Any, **kwargs: Any) -> Any:
         kwargs.pop("progress_bar", None)
         return original(*args, **kwargs)
 
-    window_adaptation._pybaycor_patched = True  # type: ignore[attr-defined]
-    window_adaptation.__doc__ = original.__doc__
     blackjax.window_adaptation = window_adaptation
+    try:
+        yield
+    finally:
+        blackjax.window_adaptation = original
+
+
+def _raised_inside_blackjax_wrapper(err: BaseException) -> bool:
+    """Whether ``err`` was raised inside PyMC's JAX sampling code or blackjax itself."""
+    for frame in traceback.extract_tb(err.__traceback__):
+        path = frame.filename.replace("\\", "/")
+        if "/blackjax/" in path or path.endswith("pymc/sampling/jax.py"):
+            return True
+    return False
 
 
 def _map_to_datatree(point: dict[str, np.ndarray], model: pm.Model) -> xr.DataTree:
@@ -165,10 +179,13 @@ def fit_model(
                 f"nuts_sampler={nuts_sampler!r} requires the '{nuts_sampler}' package; "
                 f"install pybaycor[{extra}]"
             )
-        if nuts_sampler == "blackjax":
-            _patch_blackjax_window_adaptation()
+        workaround = (
+            _blackjax_progress_bar_workaround()
+            if nuts_sampler == "blackjax"
+            else contextlib.nullcontext()
+        )
         try:
-            with model:
+            with workaround, model:
                 idata = pm.sample(
                     draws=draws,
                     tune=tune,
@@ -180,7 +197,7 @@ def fit_model(
                     **kwargs,
                 )
         except (TypeError, ValueError, AttributeError) as err:
-            if nuts_sampler != "blackjax":
+            if nuts_sampler != "blackjax" or not _raised_inside_blackjax_wrapper(err):
                 raise
             raise RuntimeError(
                 "The blackjax back-end failed inside PyMC's blackjax wrapper. PyMC 6.3 and "

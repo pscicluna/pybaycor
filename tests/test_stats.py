@@ -133,7 +133,7 @@ class TestCorrelationSamples:
 
 class TestCorrelationSummary:
     def test_structure(self, idata):
-        df = correlation_summary(idata)
+        df = correlation_summary(idata, ci_prob=0.94, ci_kind="hdi")
         assert isinstance(df, pd.DataFrame)
         assert df.index.name == "pair"
         assert list(df.index) == ["a~b", "a~c", "b~c"]
@@ -152,7 +152,7 @@ class TestCorrelationSummary:
         assert df.loc["a~c", ["i", "j"]].tolist() == [0, 2]
 
     def test_values(self, idata):
-        df = correlation_summary(idata)
+        df = correlation_summary(idata, ci_prob=0.94, ci_kind="hdi")
         s = correlation_samples(idata, 0, 1)
         assert df.loc["a~b", "mean"] == pytest.approx(s.mean())
         assert df.loc["a~b", "median"] == pytest.approx(np.median(s))
@@ -180,8 +180,17 @@ class TestCorrelationSummary:
         assert df.loc["a~b", "eti_95%"] == pytest.approx(np.quantile(s, 0.95), abs=0.02)
 
     def test_ci_prob_labels(self, idata):
-        df = correlation_summary(idata, ci_prob=0.5)
+        df = correlation_summary(idata, ci_prob=0.5, ci_kind="hdi")
         assert {"hdi_25%", "hdi_75%"} <= set(df.columns)
+
+    def test_defaults_follow_arviz_rcparams(self, idata):
+        prob = float(az.rcParams["stats.ci_prob"])
+        kind = str(az.rcParams["stats.ci_kind"])
+        df = correlation_summary(idata)
+        assert f"{kind}_{100 * (1 - prob) / 2:g}%" in df.columns
+        with az.rc_context({"stats.ci_prob": 0.8, "stats.ci_kind": "hdi"}):
+            df = correlation_summary(idata)
+        assert {"hdi_10%", "hdi_90%"} <= set(df.columns)
 
     def test_invalid_ci_kind_raises(self, idata):
         with pytest.raises(ValueError, match="ci_kind"):

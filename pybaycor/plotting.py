@@ -316,8 +316,10 @@ def _draw_panel(
 
     if plot_input:
         censored = data.is_censored[:, i] | data.is_censored[:, j]
-        # User keyword arguments override the defaults, including the colour.
+        # User keyword arguments override the defaults, including the colour, which
+        # then also applies to the error bars and censoring marks.
         kw = {"s": 22, "zorder": 3, "color": color_input, **scatter_kwargs}
+        color_input = kw["color"]
         if np.any(~censored):
             ax.scatter(x[~censored], y[~censored], label="data", **kw)
         if np.any(censored):
@@ -590,8 +592,14 @@ def plot_corner(
     ds = xr.Dataset(pieces)
 
     kwargs.setdefault("backend", "matplotlib")
-    with rc_context({"stats.point_estimate": point_estimate}):
-        if len(ds.data_vars) == 1:
+    n_vars = len(ds.data_vars)
+    rc = {
+        "stats.point_estimate": point_estimate,
+        # ArviZ caps the number of subplots; a corner plot needs n_vars**2 of them.
+        "plot.max_subplots": max(int(az.rcParams["plot.max_subplots"]), n_vars * n_vars),
+    }
+    with rc_context(rc):
+        if n_vars == 1:
             kwargs.setdefault("point_estimate", point_estimate)
             pc = az.plot_dist(ds, **kwargs)
         else:

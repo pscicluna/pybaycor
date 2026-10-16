@@ -87,6 +87,9 @@ class ModelInfo:
         Trace variables that :meth:`~pybaycor.BayesianCorrelation.summarise` reports.
     priors : dict
         The hyper-parameters actually used.
+    pattern : dict or None
+        For models built with ``mutable_values=True``: the uncertainties and censoring
+        of the original data (in data units), which any replacement data must match.
     """
 
     transform: Standardisation
@@ -100,6 +103,7 @@ class ModelInfo:
     names: list[str] = field(default_factory=list)
     independent: bool = False
     mutable_values: bool = False
+    pattern: dict[str, np.ndarray] | None = None
 
     @property
     def has_latent(self) -> bool:
@@ -193,17 +197,32 @@ def _value_arrays(z: CorrelationData) -> dict[str, np.ndarray]:
     }
 
 
+_PATTERN_KEYS = ("sigma_lower", "sigma_upper", "censoring", "lower", "upper")
+
+
+def _data_pattern(data: CorrelationData) -> dict[str, np.ndarray]:
+    return {key: np.array(getattr(data, key), copy=True) for key in _PATTERN_KEYS}
+
+
 def set_model_values(model: pm.Model, info: ModelInfo, data: CorrelationData) -> None:
     """Replace the observed values of a model built with ``mutable_values=True``.
 
-    ``data`` must have the same shape, uncertainty pattern and censoring pattern (same
-    limits) as the data the model was built from; only the values may differ. Used to
-    refit many simulated data sets without rebuilding and recompiling the model.
+    Only the *values* of the data may differ from those the model was built from: the
+    uncertainties and the censoring (flags and limits) are compiled into the graph, so
+    ``data`` must have identical ``sigma_lower``, ``sigma_upper``, ``censoring``,
+    ``lower`` and ``upper`` arrays, and a mismatch raises ``ValueError``. Used to refit
+    many simulated data sets without rebuilding and recompiling the model.
     """
-    if not info.mutable_values:
+    if not info.mutable_values or info.pattern is None:
         raise ValueError("The model was not built with mutable_values=True")
     if data.shape != (info.n_points, info.n_dim):
         raise ValueError("The new data must have the same shape as the original data")
+    for key in _PATTERN_KEYS:
+        if not np.array_equal(getattr(data, key), info.pattern[key], equal_nan=True):
+            raise ValueError(
+                f"The new data's {key} differs from the data the model was built from; "
+                "only the values may change between calls to set_model_values"
+            )
     arrays = _value_arrays(data.standardised(info.transform))
     pm.set_data({k: v for k, v in arrays.items() if k in model.named_vars}, model=model)
 
@@ -378,6 +397,7 @@ def build_model(
                 list(data.names),
                 independent,
                 mutable_values=mutable_values,
+                pattern=_data_pattern(data) if mutable_values else None,
             )
             return model, info
 
@@ -528,5 +548,6 @@ def build_model(
         list(data.names),
         independent,
         mutable_values=mutable_values,
+        pattern=_data_pattern(data) if mutable_values else None,
     )
     return model, info

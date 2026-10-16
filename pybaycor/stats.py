@@ -102,8 +102,8 @@ def correlation_summary(
     *,
     names: list[str] | None = None,
     eta: float = 2.0,
-    ci_prob: float = 0.94,
-    ci_kind: str = "hdi",
+    ci_prob: float | None = None,
+    ci_kind: str | None = None,
     ref_val: float = 0.0,
 ) -> pd.DataFrame:
     """Tidy per-pair summary of the posterior correlation coefficients.
@@ -116,10 +116,13 @@ def correlation_summary(
         Variable names (defaults to the ``variable`` coordinate of the posterior).
     eta : float
         LKJ shape used in the prior, needed for the Bayes factor.
-    ci_prob : float
-        Probability mass of the credible interval.
-    ci_kind : {"hdi", "eti"}
-        Highest-density or equal-tailed interval.
+    ci_prob : float, optional
+        Probability mass of the credible interval. Defaults to ArviZ's
+        ``rcParams["stats.ci_prob"]`` (0.89 in ArviZ 1), the same default that
+        :func:`arviz.summary` uses, so both tables report the same interval.
+    ci_kind : {"hdi", "eti"}, optional
+        Highest-density or equal-tailed interval; defaults to
+        ``rcParams["stats.ci_kind"]`` ("eti" in ArviZ 1).
     ref_val : float
         Null value for ``prob_greater`` and the Bayes factor.
 
@@ -133,6 +136,10 @@ def correlation_summary(
     """
     import arviz as az
 
+    if ci_prob is None:
+        ci_prob = float(az.rcParams["stats.ci_prob"])
+    if ci_kind is None:
+        ci_kind = str(az.rcParams["stats.ci_kind"])
     post = _posterior(idata)
     corr = post["chol_corr"]
     sample_dims = [dd for dd in ("chain", "draw") if dd in corr.dims]

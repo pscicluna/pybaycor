@@ -211,7 +211,10 @@ class TestOptions:
         logp = model.compile_logp()
         point = model.initial_point()
         before = logp(point)
-        shifted = CorrelationData(xdata + 0.7, sigma=sig, censoring=cens)
+        # Flag-based limits are the values themselves, so the censored entries keep
+        # their values (as null_pvalue does); only the observed values move.
+        moved = np.where(cens == 0, xdata + 0.7, xdata)
+        shifted = CorrelationData(moved, sigma=sig, censoring=cens)
         set_model_values(model, info, shifted)
         after = logp(point)
         assert np.isfinite(before) and np.isfinite(after) and before != after
@@ -223,6 +226,18 @@ class TestOptions:
             set_model_values(build_model(cd)[0], build_model(cd)[1], shifted)
         with pytest.raises(ValueError, match="same shape"):
             set_model_values(model, info, CorrelationData(xdata[:-1], sigma=sig[:-1]))
+        # Same shape but a different uncertainty/censoring pattern must be rejected.
+        other_sig = sig.copy()
+        other_sig[0, 1] = 0.3
+        with pytest.raises(ValueError, match="sigma_lower differs"):
+            set_model_values(model, info, CorrelationData(xdata, sigma=other_sig, censoring=cens))
+        other_cens = cens.copy()
+        other_cens[5, 1] = -1
+        with pytest.raises(ValueError, match="censoring differs"):
+            set_model_values(model, info, CorrelationData(xdata, sigma=sig, censoring=other_cens))
+        # A shifted limit (same flags) is a different censoring pattern too.
+        with pytest.raises(ValueError, match="upper differs"):
+            set_model_values(model, info, CorrelationData(xdata + 0.7, sigma=sig, censoring=cens))
 
     def test_independent(self, xdata):
         model, info = build_model(CorrelationData(xdata), independent=True)
