@@ -1,0 +1,31 @@
+name: Sync CITATION.cff
+
+# When a release tag is pushed, bring CITATION.cff on the default branch in line with
+# it (version and date-released) so the citation metadata always names the latest
+# released version.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - run: python scripts/sync_citation.py "${GITHUB_REF_NAME}"
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- CITATION.cff; then
+            echo "CITATION.cff already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Update CITATION.cff for ${GITHUB_REF_NAME}"
+          git push
