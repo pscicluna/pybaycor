@@ -23,6 +23,8 @@ A ground-up modernisation. See `ROADMAP.md` for the analysis and the plan.
   deprecation warning) and imply fitting in raw units.
 - Plotting functions return the matplotlib figure, never call `plt.show()` unless
   asked, and save with `savefig` (the old code called the non-existent `plt.save`).
+- The package version is derived from git tags at build time (`hatch-vcs`); a
+  tagged commit `vX.Y.Z` builds as `X.Y.Z`, later commits as `X.Y.(Z+1).devN+g<hash>`.
 - `seaborn` is no longer a dependency.
 - The module `pybaycor.pybaycor` is deprecated; import from `pybaycor`.
 - All constructor arguments after `data` (after `sigma` for the hierarchical classes)

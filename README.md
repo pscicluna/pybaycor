@@ -43,7 +43,9 @@ pixi run lint && pixi run fmt-check
 pixi run docs
 ```
 
-pybaycor requires Python ≥ 3.12.
+pybaycor requires Python ≥ 3.12. The package version comes from the git tags
+(`hatch-vcs`): to release, tag the commit (`git tag v0.3.0 && git push --tags`) and
+build; `pybaycor.__version__` reports the resolved version.
 
 ## Quick start
 

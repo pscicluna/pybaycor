@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.25"]
+requires = ["hatchling>=1.25", "hatch-vcs>=0.4"]
 build-backend = "hatchling.build"
 
 [project]
@@ -53,8 +53,14 @@ Homepage = "https://github.com/pscicluna/pybaycor"
 # ---------------------------------------------------------------------------
 # hatch
 # ---------------------------------------------------------------------------
+# The version is derived from git tags (hatch-vcs / setuptools-scm): a tagged commit
+# such as v0.3.0 gives 0.3.0, later commits give 0.3.1.devN+g<hash>. The build writes
+# the resolved version to pybaycor/_version.py, which is not committed.
 [tool.hatch.version]
-path = "pybaycor/__init__.py"
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "pybaycor/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pybaycor"]

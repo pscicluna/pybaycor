@@ -18,7 +18,15 @@ from .inference import available_nuts_samplers, fit_model
 from .model import DEFAULT_PRIORS, build_model
 from .stats import bayes_factor, correlation_summary
 
-__version__ = "0.3.0.dev0"
+try:  # written by the build from the git tags (hatch-vcs)
+    from ._version import __version__
+except ImportError:  # pragma: no cover - source checkout without a build
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        __version__ = version("pybaycor")
+    except PackageNotFoundError:
+        __version__ = "0.0.0+unknown"
 
 
 def __getattr__(name: str):

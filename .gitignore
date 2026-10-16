@@ -129,6 +129,7 @@ dmypy.json
 .pyre/
 
 # pixi
+pybaycor/_version.py
 .pixi/
 
 # project-local tooling caches / outputs
