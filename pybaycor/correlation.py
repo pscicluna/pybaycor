@@ -518,7 +518,13 @@ class BayesianCorrelation:
         return pvalue
 
     # ------------------------------------------------------------------ plotting
-    def plot_trace(self, plotfile: str | None = None, show: bool = False, **kwargs: Any) -> Any:
+    def plot_trace(
+        self,
+        plotfile: str | None = None,
+        show: bool = False,
+        var_names: list[str] | None = None,
+        **kwargs: Any,
+    ) -> Any:
         """Trace and marginal plots of the population parameters.
 
         Parameters
@@ -527,17 +533,18 @@ class BayesianCorrelation:
             Save the figure to this file.
         show : bool, default False
             Call :func:`matplotlib.pyplot.show`.
+        var_names : list of str, optional
+            Trace variables to show; defaults to ``mu``, ``chol_corr`` and, where present,
+            ``nu`` and ``error_scale``.
         **kwargs
             Passed to :func:`pybaycor.plotting.plot_trace`.
         """
         from . import plotting
 
+        if var_names is None:
+            var_names = [v for v in self.info.summary_vars if v != "chol_stds"]
         return plotting.plot_trace(
-            self._require_fit(),
-            var_names=[v for v in self.info.summary_vars if v != "chol_stds"],
-            plotfile=plotfile,
-            show=show,
-            **kwargs,
+            self._require_fit(), var_names=var_names, plotfile=plotfile, show=show, **kwargs
         )
 
     def plot_data(
