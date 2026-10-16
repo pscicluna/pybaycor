@@ -97,7 +97,7 @@ def test_exact_recovery(exact_fit):
 def test_three_dimensional_recovery():
     data, corr = make_gaussian_data_3d(60, seed=7)
     bc = fit_nuts(BayesianCorrelation(data, names=list("abc")), seed=7)
-    df = bc.correlation_summary()
+    df = bc.correlation_summary(ci_prob=0.94, ci_kind="hdi")
     assert list(df.index) == ["a~b", "a~c", "b~c"]
     for (i, j), (_, row) in zip([(0, 1), (0, 2), (1, 2)], df.iterrows(), strict=True):
         assert abs(row["mean"] - corr[i, j]) < 0.2
