@@ -39,9 +39,8 @@ autoapi_options = [
     "undoc-members",
     "show-inheritance",
     "show-module-summary",
-    "imported-members",
 ]
-autoapi_python_class_content = "both"
+autoapi_python_class_content = "class"
 autoapi_keep_files = False
 
 # -- Napoleon (NumPy-style docstrings) --------------------------------------
@@ -49,6 +48,7 @@ napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 napoleon_use_param = True
 napoleon_use_rtype = True
+napoleon_use_ivar = True  # avoid duplicate attribute descriptions with AutoAPI
 
 # -- Intersphinx -------------------------------------------------------------
 intersphinx_mapping = {
