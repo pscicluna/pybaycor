@@ -197,7 +197,7 @@ def _value_arrays(z: CorrelationData) -> dict[str, np.ndarray]:
     }
 
 
-_PATTERN_KEYS = ("sigma_lower", "sigma_upper", "censoring", "lower", "upper")
+_PATTERN_KEYS = ("sigma_lower", "sigma_upper", "censoring", "lower", "upper", "is_missing")
 
 
 def _data_pattern(data: CorrelationData) -> dict[str, np.ndarray]:
@@ -230,6 +230,7 @@ def set_model_values(model: pm.Model, info: ModelInfo, data: CorrelationData) ->
 def _initial_latent(data: CorrelationData) -> np.ndarray:
     """Sensible starting values for the latent true values (standardised units)."""
     init = data.values.copy()
+    init[data.is_missing] = 0.0
     up, lo, iv = data.is_upper_limit, data.is_lower_limit, data.is_interval
     init[up] = data.upper[up] - 0.5
     init[lo] = data.lower[lo] + 0.5
@@ -425,7 +426,7 @@ def build_model(
             free = z.is_latent & ~(z.is_exact & z.is_censored)
             if free.any():
                 idx = np.nonzero(free)
-                pseudo_sd = np.maximum(z.sigma[idx], 1e-3)
+                pseudo_sd = np.where(z.is_missing[idx], 1.0, np.maximum(z.sigma[idx], 1e-3))
                 raw = pm.Normal(
                     "theta_free",
                     mu=value_tensor("free_init_z"),

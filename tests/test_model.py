@@ -72,6 +72,25 @@ class TestCases:
         assert len(model.potentials) == 0
         _finite_logps(model)
 
+    def test_missing_entries_are_latent_without_observation(self, xdata):
+        values = xdata.copy()
+        values[0, 1] = np.nan
+        model, info = build_model(CorrelationData(values))
+        assert info.case == "augmented"
+        assert "theta_free" in free_rv_names(model)
+        assert model["theta_free"].type.shape == (1,)
+        assert not model.observed_RVs
+        assert {p.name for p in model.potentials} == {"latent_logp"}
+        _finite_logps(model)
+
+    def test_missing_uncertain_entry_skips_normal_likelihood(self, xdata):
+        values = xdata.copy()
+        values[0, 1] = np.nan
+        model, info = build_model(CorrelationData(values, sigma=0.3))
+        assert info.case == "latent"
+        assert model["obs_z"].type.shape == (values.size - 1,)
+        _finite_logps(model)
+
     def test_augmented_free(self, xdata):
         sig = np.zeros(xdata.shape)
         sig[:, 0] = 0.3
@@ -196,6 +215,15 @@ class TestOptions:
     def test_invalid_priors_raise(self, xdata, priors):
         with pytest.raises(ValueError, match="priors"):
             build_model(CorrelationData(xdata), priors=priors)
+
+    def test_mutable_missing_mask_is_fixed(self, xdata):
+        from pybaycor.model import set_model_values
+
+        values = xdata.copy()
+        values[0, 0] = np.nan
+        model, info = build_model(CorrelationData(values), mutable_values=True)
+        with pytest.raises(ValueError, match="is_missing differs"):
+            set_model_values(model, info, CorrelationData(xdata))
 
     def test_mutable_values(self, xdata, rng):
         from pybaycor.model import set_model_values

@@ -316,11 +316,48 @@ class TestCensoring:
         with pytest.raises(ValueError, match="lower < upper"):
             CorrelationData(x, lower=lo, upper=hi)
 
-    def test_nan_in_observed_entry_raises(self, x):
+    def test_nan_in_observed_entry_is_missing(self, x):
         xx = x.copy()
         xx[4, 1] = np.nan
-        with pytest.raises(ValueError, match="NaN/inf for an entry that is not censored"):
-            CorrelationData(xx)
+        cd = CorrelationData(xx)
+        assert cd.is_missing[4, 1]
+        assert cd.n_missing == 1
+        assert cd.n_latent == 1
+        assert cd.n_exact == x.size - 1
+        assert not cd.is_observed[4, 1]
+        assert not cd.is_uncertain[4, 1]
+        assert not cd.is_censored[4, 1]
+        assert np.isnan(cd.values[4, 1])
+
+    def test_missing_entries_ignore_uncertainties(self, x):
+        xx = x.copy()
+        xx[0, 0] = np.nan
+        low = np.zeros(x.shape)
+        high = np.zeros(x.shape)
+        low[0, 0], high[0, 0] = -1.0, np.inf
+        cd = CorrelationData(xx, sigma_lower=low, sigma_upper=high)
+        assert cd.n_missing == 1
+        assert cd.sigma_lower[0, 0] == cd.sigma_upper[0, 0] == 0.0
+        assert not cd.is_asymmetric[0, 0]
+
+    def test_missing_with_bounds_remains_censored(self, x):
+        xx = x.copy()
+        xx[0, 0] = np.nan
+        bounds = np.full(x.shape, np.nan)
+        bounds[0, 0] = 2.0
+        cd = CorrelationData(xx, upper=bounds, sigma=0.3)
+        assert cd.n_missing == 0
+        assert cd.is_upper_limit[0, 0]
+        assert cd.is_uncertain[0, 0]
+
+    def test_few_non_missing_entries_warn(self, x):
+        xx = x.copy()
+        xx[:-2, 1] = np.nan
+        with pytest.warns(UserWarning, match="Variable x1.*weakly identified"):
+            cd = CorrelationData(xx)
+        assert cd.n_missing == x.shape[0] - 2
+        assert f"{x.shape[0] - 2} missing" in cd.describe()
+        assert np.isfinite(Standardisation.from_data(cd).loc).all()
 
     def test_inf_in_observed_entry_raises(self, x):
         xx = x.copy()
