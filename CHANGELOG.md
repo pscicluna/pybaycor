@@ -47,6 +47,10 @@ A ground-up modernisation. See `ROADMAP.md` for the analysis and the plan.
 - Censored data: upper limits, lower limits and interval censoring, specified per
   entry with `censoring=` flags or `lower=`/`upper=` bound arrays, with or without
   measurement uncertainty on the censored entries.
+- Fully missing (`NaN`) data entries are treated as unobserved latent values;
+  `CorrelationData` exposes `is_missing`/`n_missing`, warns when a variable has fewer
+  than three non-missing entries, and `plot_data` marks missing coordinates on axes
+  ([#9](https://github.com/pscicluna/pybaycor/issues/9)).
 - `error_scale=True` infers a per-variable correction factor for the quoted
   uncertainties.
 - `CorrelationData` container with validation and `describe()`.

@@ -65,6 +65,19 @@ def test_smoke_nuts_fit(smoke_fit):
     np.testing.assert_array_equal(sd_vals, 0.0)
 
 
+@slow
+def test_missing_at_random_recovery():
+    truth = make_gaussian_data(80, 0.65, seed=19)
+    rows = np.random.default_rng(20).choice(len(truth), size=16, replace=False)
+    observed = truth.copy()
+    observed[rows, 1] = np.nan
+    bc = fit_nuts(BayesianCorrelation(observed), seed=19, draws=350, tune=350)
+    assert bc.data.n_missing == 16
+    mean, _, lo, hi = corr_stats(bc)
+    assert abs(mean - 0.65) < 0.2
+    assert lo < 0.65 < hi
+
+
 # --------------------------------------------------------------- (a) exact 2-D
 @pytest.fixture(scope="module")
 def exact_fit():

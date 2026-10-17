@@ -79,6 +79,42 @@ def test_plot_data_colour_applies_to_error_bars_and_arrows(fitted_3d):
     plt.close(fig)
 
 
+def test_missing_coordinates_have_axis_rugs():
+    from pybaycor.model import ModelInfo
+    from pybaycor.plotting import _draw_panel, _PosteriorSummary
+
+    from pybaycor import CorrelationData, Standardisation
+
+    values = np.array([[np.nan, 0.5], [0.6, np.nan], [1.0, 1.2], [1.5, 1.0]])
+    sigma = np.zeros(values.shape)
+    sigma[2, 0] = 0.1
+    data = CorrelationData(values, sigma=sigma)
+    summary = _PosteriorSummary(
+        np.zeros(2), np.eye(2), np.nan_to_num(values), np.zeros_like(values), None, None
+    )
+    info = ModelInfo(Standardisation.identity(2), False, False, "augmented")
+    fig, ax = plt.subplots()
+    _draw_panel(
+        ax,
+        data,
+        summary,
+        info,
+        0,
+        1,
+        plot_input=True,
+        plot_fitted=True,
+        prob=0.95,
+        color_input="black",
+        color_fitted="blue",
+        scatter_kwargs={},
+    )
+    assert {"missing x", "missing y"} <= {line.get_label() for line in ax.lines}
+    for collection in ax.collections:
+        if isinstance(collection, LineCollection):
+            assert all(np.isfinite(segment).all() for segment in collection.get_segments())
+    plt.close(fig)
+
+
 def test_plot_trace_rows(fitted_3d):
     fig = fitted_3d.plot_trace()
     # mu[a..c], corr[a~b], corr[a~c], corr[b~c], nu, error_scale[a..c] -> 10 rows x 2
