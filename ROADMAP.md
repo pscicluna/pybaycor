@@ -91,6 +91,7 @@ chosen independently per entry from the inputs `sigma`, `censoring`, `lower`,
 
 | Entry type | Input | Treatment |
 | --- | --- | --- |
+| missing (MAR) | `NaN` in data without censoring bounds | latent true value inferred from the joint model; non-detections must instead be marked censored |
 | exact, observed | `sigma == 0`/NaN, not censored | $\theta_{ij} = x_{ij}$ fixed (no latent parameter) |
 | uncertain, observed | `sigma_ij > 0` | $x_{ij} \sim \mathcal N(\theta_{ij}, \sigma_{ij})$ |
 | uncertain, asymmetric | `sigma_lower=`, `sigma_upper=` | two-piece Normal with scales $\sigma^-_{ij}, \sigma^+_{ij}$ ([#5](https://github.com/pscicluna/pybaycor/issues/5)) |
@@ -162,6 +163,7 @@ matter of installing the optional extra.
 | #4 plotting | `plotting.py` rewritten: any dimensionality, error bars, censoring arrows, posterior ellipses, corner plots of the correlation coefficients only, every function returns the figure and accepts `ax` |
 | #5 asymmetric errors | two-piece Normal observation channel (`sigma_lower=`/`sigma_upper=`) |
 | #6 p-values | `correlation_summary()` reports $P(\rho>0)$ and the Savage-Dickey Bayes factor for $\rho_{ij}=0$; the parametric-bootstrap p-value from the issue is provided by `null_pvalue()` and is documented as expensive |
+| #9 missing data | unbounded `NaN` entries are latent (MAR), with paired-data identifiability warnings and inferred values in `vals` / `inferred_values()` |
 | #7 PyMC3 → modern stack | PyMC ≥ 6.1 / PyTensor 3 / ArviZ ≥ 1.1 with JAX and nutpie backends |
 
 ## 6. Remaining work (not on this branch)
@@ -171,9 +173,7 @@ Each item below is tracked as a GitHub issue so it can be picked up independentl
 
 1. **Location–scale extension** ([#8](https://github.com/pscicluna/pybaycor/issues/8)): allow $\boldsymbol\Sigma$ (or the error scale) to
    depend on a covariate for data whose intrinsic scatter is genuinely heteroscedastic.
-2. **Missing data** ([#9](https://github.com/pscicluna/pybaycor/issues/9)): `NaN` entries that are neither observed nor censored could be
-   treated as fully latent; the machinery exists, only the input validation needs to
-   allow it and the identifiability warning needs writing.
+2. **Missing data** ([#9](https://github.com/pscicluna/pybaycor/issues/9)): implemented on this branch (MAR latent imputation); see the issue map above.
 3. **Posterior predictive checks** ([#10](https://github.com/pscicluna/pybaycor/issues/10)): `plot_ppc` using ArviZ's `plot_ppc_*` family once
    the observed-data group is populated for the mixed exact/latent case.
 4. **Publishing** ([#11](https://github.com/pscicluna/pybaycor/issues/11)): enable the release workflow (trusted publishing to PyPI from a tag),
