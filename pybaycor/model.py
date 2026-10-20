@@ -228,7 +228,7 @@ def set_model_values(model: pm.Model, info: ModelInfo, data: CorrelationData) ->
 
 
 def _initial_latent(data: CorrelationData) -> np.ndarray:
-    """Sensible starting values for the latent true values (standardised units)."""
+    """Sensible starting values for latent true values in the data's current units."""
     centre = Standardisation.from_data(data).loc
     init = np.where(data.is_missing, centre, data.values)
     up, lo, iv = data.is_upper_limit, data.is_lower_limit, data.is_interval
