@@ -203,9 +203,10 @@ class Standardisation:
         return np.asarray(z, dtype=float) * self.scale + self.loc
 
 
-@dataclass(eq=False)
 _MIN_PAIRED = 3
 
+
+@dataclass(eq=False)
 class CorrelationData:
     """Canonical container for a multivariate data set with uncertainties and censoring.
 
