@@ -78,7 +78,7 @@ flattened samples of one coefficient.
 bc = pbc.BayesianCorrelation(data, sigma=sigma)  # sigma: (n_points, n_dim), scalar or (n_dim,)
 ```
 
-Entries of `sigma` that are `0` or `NaN` are treated as exact, so a variable without
+Entries of `sigma` that are `0` or `NaN` denote exact measurements (zero uncertainty); unlike `sigma`, a `NaN` in `data` with no censoring bounds represents a missing observation. Thus a variable without
 uncertainties is simply a column of zeros, and a data set where only some points have
 error bars needs no special treatment. A 1-D `sigma` always means one value per
 variable (when the data have as many points as variables a 2-D array is required).
@@ -96,6 +96,10 @@ arrays, `BayesianCorrelation(x=x, y=y, x_err=..., y_err=...)` or
 If the quoted error bars may be globally under- or over-estimated, `error_scale=True`
 infers a correction factor per variable (identifiable only when the quoted
 uncertainties vary from point to point).
+
+### Missing data
+
+A `NaN` in `data` with no censoring bounds is treated as **missing at random** (MAR): its true value is inferred as a latent variable, and the filled-in values are available in the posterior `vals` and through `inferred_values()` after fitting. This assumption is important: **non-detections are censored measurements, not missing-at-random values**. Specify their limits using `censoring=` or `lower=`/`upper=`; leaving them as plain `NaN` will impute them and can bias the inferred correlation coefficient.
 
 ### Censored data
 
