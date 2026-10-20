@@ -210,7 +210,7 @@ def set_model_values(model: pm.Model, info: ModelInfo, data: CorrelationData) ->
     Only the *values* of the data may differ from those the model was built from: the
     uncertainties and the censoring (flags and limits) are compiled into the graph, so
     ``data`` must have identical ``sigma_lower``, ``sigma_upper``, ``censoring``,
-    ``lower`` and ``upper`` arrays, and a mismatch raises ``ValueError``. Used to refit
+    ``lower``, ``upper`` and ``is_missing`` arrays, and a mismatch raises ``ValueError``. Used to refit
     many simulated data sets without rebuilding and recompiling the model.
     """
     if not info.mutable_values or info.pattern is None:
@@ -229,8 +229,8 @@ def set_model_values(model: pm.Model, info: ModelInfo, data: CorrelationData) ->
 
 def _initial_latent(data: CorrelationData) -> np.ndarray:
     """Sensible starting values for the latent true values (standardised units)."""
-    init = data.values.copy()
-    init[data.is_missing] = 0.0
+    centre = Standardisation.from_data(data).loc
+    init = np.where(data.is_missing, centre, data.values)
     up, lo, iv = data.is_upper_limit, data.is_lower_limit, data.is_interval
     init[up] = data.upper[up] - 0.5
     init[lo] = data.lower[lo] + 0.5
@@ -426,7 +426,10 @@ def build_model(
             free = z.is_latent & ~(z.is_exact & z.is_censored)
             if free.any():
                 idx = np.nonzero(free)
-                pseudo_sd = np.where(z.is_missing[idx], 1.0, np.maximum(z.sigma[idx], 1e-3))
+                col_scale = Standardisation.from_data(z).scale
+                pseudo_sd = np.where(
+                    z.is_missing[idx], col_scale[idx[1]], np.maximum(z.sigma[idx], 1e-3)
+                )
                 raw = pm.Normal(
                     "theta_free",
                     mu=value_tensor("free_init_z"),
