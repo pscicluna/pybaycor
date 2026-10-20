@@ -5,10 +5,10 @@ from __future__ import annotations
 import warnings
 
 import numpy as np
+import pybaycor.correlation as correlation_module
 import pytest
 
 from pybaycor import BayesianCorrelation, CorrelationData
-import pybaycor.correlation as correlation_module
 
 
 def test_null_pvalue_preserves_missing_mask(monkeypatch):
