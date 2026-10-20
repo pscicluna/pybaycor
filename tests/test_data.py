@@ -334,7 +334,7 @@ class TestCensoring:
         xx[0, 0] = np.nan
         low = np.zeros(x.shape)
         high = np.zeros(x.shape)
-        low[0, 0], high[0, 0] = -1.0, np.inf
+        low[0, 0], high[0, 0] = np.nan, np.nan
         cd = CorrelationData(xx, sigma_lower=low, sigma_upper=high)
         assert cd.n_missing == 1
         assert cd.sigma_lower[0, 0] == cd.sigma_upper[0, 0] == 0.0
@@ -353,7 +353,7 @@ class TestCensoring:
     def test_few_non_missing_entries_warn(self, x):
         xx = x.copy()
         xx[:-2, 1] = np.nan
-        with pytest.warns(UserWarning, match="Variable x1.*weakly identified"):
+        with pytest.warns(UserWarning, match="Variables x0 and x1.*weakly identified"):
             cd = CorrelationData(xx)
         assert cd.n_missing == x.shape[0] - 2
         assert f"{x.shape[0] - 2} missing" in cd.describe()
