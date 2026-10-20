@@ -16,6 +16,7 @@ may be observed or censored (upper limit, lower limit or interval).
 
 from __future__ import annotations
 
+import itertools
 import warnings
 from dataclasses import dataclass, field
 from typing import Any
@@ -203,6 +204,8 @@ class Standardisation:
 
 
 @dataclass(eq=False)
+_MIN_PAIRED = 3
+
 class CorrelationData:
     """Canonical container for a multivariate data set with uncertainties and censoring.
 
@@ -343,14 +346,14 @@ class CorrelationData:
         missing = observed & np.isnan(values)
         if np.any(np.isinf(values[observed])):
             raise ValueError("data contains inf for an entry that is not censored")
-        s_lo[missing] = 0.0
-        s_hi[missing] = 0.0
         for name, s in (("sigma_lower", s_lo), ("sigma_upper", s_hi)):
             s[np.isnan(s)] = 0.0
             if np.any(s < 0):
                 raise ValueError(f"{name} must be non-negative (0 or NaN means exact)")
             if np.any(~np.isfinite(s)):
                 raise ValueError(f"{name} must be finite")
+        s_lo[missing] = 0.0
+        s_hi[missing] = 0.0
         mixed = (s_lo == 0) != (s_hi == 0)
         if np.any(mixed):
             raise ValueError(
@@ -374,11 +377,17 @@ class CorrelationData:
             self.names = [str(v) for v in names]
             if len(self.names) != d:
                 raise ValueError(f"names has {len(self.names)} entries but data has {d} variables")
+        present = ~missing
         for j, name in enumerate(self.names):
-            if (count := int((~missing[:, j]).sum())) < 3:
+            if not present[:, j].any():
+                raise ValueError(f"Variable {name} has no non-missing entries")
+        for a, b in itertools.combinations(range(d), 2):
+            paired = int((present[:, a] & present[:, b]).sum())
+            if paired < _MIN_PAIRED:
                 warnings.warn(
-                    f"Variable {name} has only {count} non-missing entries; correlation is weakly "
-                    "identified (assuming missing at random)",
+                    f"Variables {self.names[a]} and {self.names[b]} are both present in only "
+                    f"{paired} points; their correlation is weakly identified "
+                    "(missing at random assumed)",
                     UserWarning,
                     stacklevel=2,
                 )
@@ -500,9 +509,9 @@ class CorrelationData:
             lo = int(self.is_lower_limit[:, j].sum())
             iv = int(self.is_interval[:, j].sum())
             bits = [f"{unc} uncertain"]
-            n_missing = int(self.is_missing[:, j].sum())
-            if n_missing:
-                bits.append(f"{n_missing} missing")
+            missing_count = int(self.is_missing[:, j].sum())
+            if missing_count:
+                bits.append(f"{missing_count} missing")
             if asym:
                 bits.append(f"{asym} asymmetric")
             if up:
