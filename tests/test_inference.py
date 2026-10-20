@@ -76,6 +76,12 @@ def test_missing_at_random_recovery():
     mean, _, lo, hi = corr_stats(bc)
     assert abs(mean - 0.65) < 0.2
     assert lo < 0.65 < hi
+    mean_vals, sd_vals = bc.inferred_values()
+    miss = bc.data.is_missing
+    assert np.all(sd_vals[miss] > 0)
+    zscore = np.abs(mean_vals[miss] - truth[miss]) / sd_vals[miss]
+    assert np.mean(zscore < 2) >= 0.75
+    np.testing.assert_allclose(mean_vals[~miss], observed[~miss])
 
 
 # --------------------------------------------------------------- (a) exact 2-D
