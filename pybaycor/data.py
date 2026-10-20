@@ -3,19 +3,21 @@
 The :class:`CorrelationData` container normalises the many ways a user can describe
 a data set into a single canonical form that the model builder consumes:
 
-* ``values``: ``(n_points, n_dim)`` observed values (``NaN`` where an entry is only
-  known through its censoring limits),
+* ``values``: ``(n_points, n_dim)`` observed values (``NaN`` for fully missing
+  entries; censored entries may use ``NaN`` with explicit limits),
 * ``sigma_lower`` / ``sigma_upper``: ``(n_points, n_dim)`` measurement uncertainties
   below and above the value (equal for symmetric errors; ``0`` means *exact*),
 * ``lower`` / ``upper``: ``(n_points, n_dim)`` censoring bounds (``-inf``/``+inf`` when
   unbounded).
 
-Each entry of the data set is independently classified as exact or uncertain, and
-as observed or censored (upper limit, lower limit or interval).
+Each entry is classified as exact, uncertain or missing, and non-missing entries
+may be observed or censored (upper limit, lower limit or interval).
 """
 
 from __future__ import annotations
 
+import itertools
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -201,6 +203,9 @@ class Standardisation:
         return np.asarray(z, dtype=float) * self.scale + self.loc
 
 
+_MIN_PAIRED = 3
+
+
 @dataclass(eq=False)
 class CorrelationData:
     """Canonical container for a multivariate data set with uncertainties and censoring.
@@ -208,14 +213,16 @@ class CorrelationData:
     Parameters
     ----------
     data : array_like of shape (n_points, n_dim)
-        Observed values. For a censored entry this is the limit (for one-sided
-        censoring) or may be ``NaN`` (when ``lower``/``upper`` give the bounds).
+        Observed values. ``NaN`` without a censoring bound means a fully missing
+        entry. For a censored entry this is the limit (for one-sided censoring)
+        or may be ``NaN`` (when ``lower``/``upper`` give the bounds).
     sigma : array_like, optional
         Symmetric measurement uncertainties. May be a scalar, an ``(n_dim,)`` vector
         (one value per variable), or an ``(n_points, n_dim)`` array. ``0`` or ``NaN``
         marks an entry as *exact* (no measurement error), so variables with and without
         uncertainties can be mixed freely, as can points with and without uncertainties
-        within a variable. When ``n_points == n_dim`` a 1-D input is ambiguous and a 2-D
+        within a variable. Uncertainties are ignored for missing entries.
+        When ``n_points == n_dim`` a 1-D input is ambiguous and a 2-D
         array is required.
     sigma_lower, sigma_upper : array_like, optional
         Asymmetric uncertainties below and above the value (two-piece Normal errors),
@@ -304,20 +311,6 @@ class CorrelationData:
         else:
             s_lo = _as_2d("sigma", sigma, (n, d))
             s_hi = s_lo.copy()
-        for name, s in (("sigma_lower", s_lo), ("sigma_upper", s_hi)):
-            s[np.isnan(s)] = 0.0
-            if np.any(s < 0):
-                raise ValueError(f"{name} must be non-negative (0 or NaN means exact)")
-            if np.any(~np.isfinite(s)):
-                raise ValueError(f"{name} must be finite")
-        # An entry is exact only if both scales are 0; a single 0 with a positive partner
-        # is almost certainly an input error.
-        mixed = (s_lo == 0) != (s_hi == 0)
-        if np.any(mixed):
-            raise ValueError(
-                "Asymmetric uncertainties must be either both zero (exact) or both positive"
-            )
-
         # --- censoring -----------------------------------------------------------
         cens = (
             np.full((n, d), OBSERVED, dtype=int)
@@ -349,17 +342,29 @@ class CorrelationData:
         if np.any(lo >= hi):
             raise ValueError("Censoring bounds must satisfy lower < upper")
 
-        # Observed entries must be finite; censored entries may be NaN.
+        # A NaN without censoring bounds has no observation channel.
         observed = cens == OBSERVED
-        if np.any(~np.isfinite(values[observed])):
+        missing = observed & np.isnan(values)
+        if np.any(np.isinf(values[observed])):
+            raise ValueError("data contains inf for an entry that is not censored")
+        for name, s in (("sigma_lower", s_lo), ("sigma_upper", s_hi)):
+            s[np.isnan(s)] = 0.0
+            if np.any(s < 0):
+                raise ValueError(f"{name} must be non-negative (0 or NaN means exact)")
+            if np.any(~np.isfinite(s)):
+                raise ValueError(f"{name} must be finite")
+        s_lo[missing] = 0.0
+        s_hi[missing] = 0.0
+        mixed = (s_lo == 0) != (s_hi == 0)
+        if np.any(mixed):
             raise ValueError(
-                "data contains NaN/inf for an entry that is not censored; mark it as "
-                "censored (censoring=, lower=, upper=) or remove the point"
+                "Asymmetric uncertainties must be either both zero (exact) or both positive"
             )
+
         # For censored entries without a point value, record the limit for plotting.
-        missing = ~observed & ~np.isfinite(values)
-        values = np.where(missing & has_hi, hi, values)
-        values = np.where(missing & has_lo & ~has_hi, lo, values)
+        no_point = ~observed & ~np.isfinite(values)
+        values = np.where(no_point & has_hi, hi, values)
+        values = np.where(no_point & has_lo & ~has_hi, lo, values)
 
         self.values = values
         self.sigma_lower = s_lo
@@ -373,6 +378,20 @@ class CorrelationData:
             self.names = [str(v) for v in names]
             if len(self.names) != d:
                 raise ValueError(f"names has {len(self.names)} entries but data has {d} variables")
+        present = ~missing
+        for j, name in enumerate(self.names):
+            if not present[:, j].any():
+                raise ValueError(f"Variable {name} has no non-missing entries")
+        for a, b in itertools.combinations(range(d), 2):
+            paired = int((present[:, a] & present[:, b]).sum())
+            if paired < _MIN_PAIRED:
+                warnings.warn(
+                    f"Variables {self.names[a]} and {self.names[b]} are both present in only "
+                    f"{paired} points; their correlation is weakly identified "
+                    "(missing at random assumed)",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
     # ------------------------------------------------------------------ properties
     @property
@@ -402,13 +421,18 @@ class CorrelationData:
 
     @property
     def is_exact(self) -> NDArray[np.bool_]:
-        """Mask of entries without measurement uncertainty."""
-        return (self.sigma_lower == 0) & (self.sigma_upper == 0)
+        """Mask of non-missing entries without measurement uncertainty."""
+        return (self.sigma_lower == 0) & (self.sigma_upper == 0) & ~self.is_missing
 
     @property
     def is_uncertain(self) -> NDArray[np.bool_]:
-        """Mask of entries with measurement uncertainty."""
-        return ~self.is_exact
+        """Mask of non-missing entries with measurement uncertainty."""
+        return ((self.sigma_lower > 0) | (self.sigma_upper > 0)) & ~self.is_missing
+
+    @property
+    def is_missing(self) -> NDArray[np.bool_]:
+        """Mask of entries with no observation or censoring information."""
+        return (self.censoring == OBSERVED) & np.isnan(self.values)
 
     @property
     def is_censored(self) -> NDArray[np.bool_]:
@@ -417,8 +441,8 @@ class CorrelationData:
 
     @property
     def is_observed(self) -> NDArray[np.bool_]:
-        """Mask of uncensored entries."""
-        return self.censoring == OBSERVED
+        """Mask of observed, uncensored entries."""
+        return (self.censoring == OBSERVED) & ~self.is_missing
 
     @property
     def is_upper_limit(self) -> NDArray[np.bool_]:
@@ -451,6 +475,11 @@ class CorrelationData:
         return int(self.is_exact.sum())
 
     @property
+    def n_missing(self) -> int:
+        """Number of entries with no observation."""
+        return int(self.is_missing.sum())
+
+    @property
     def n_censored(self) -> int:
         """Number of censored entries."""
         return int(self.is_censored.sum())
@@ -481,6 +510,9 @@ class CorrelationData:
             lo = int(self.is_lower_limit[:, j].sum())
             iv = int(self.is_interval[:, j].sum())
             bits = [f"{unc} uncertain"]
+            missing_count = int(self.is_missing[:, j].sum())
+            if missing_count:
+                bits.append(f"{missing_count} missing")
             if asym:
                 bits.append(f"{asym} asymmetric")
             if up:

@@ -223,6 +223,7 @@ def _draw_censoring(
     x = _plot_positions(data, i)
     y = _plot_positions(data, j)
     length = _arrow_length_points(ax)
+    visible = ~data.is_missing[:, i] & ~data.is_missing[:, j]
     arrow = {"arrowstyle": "<-", "color": color, "lw": 1.0, "shrinkA": 0, "shrinkB": 0}
     # (axis index, mask, offset direction in points)
     specs = (
@@ -232,7 +233,7 @@ def _draw_censoring(
         (data.is_lower_limit[:, j], (0.0, length)),  # y lower limit: point up
     )
     for mask, offset in specs:
-        for k in np.nonzero(mask)[0]:
+        for k in np.nonzero(mask & visible)[0]:
             ax.annotate(
                 "",
                 xy=(x[k], y[k]),
@@ -243,7 +244,7 @@ def _draw_censoring(
                 annotation_clip=False,
             )
     for axis, mask in ((0, data.is_interval[:, i]), (1, data.is_interval[:, j])):
-        idx = np.nonzero(mask)[0]
+        idx = np.nonzero(mask & visible)[0]
         if idx.size == 0:
             continue
         col = i if axis == 0 else j
@@ -314,21 +315,24 @@ def _draw_panel(
     x = _plot_positions(data, i)
     y = _plot_positions(data, j)
 
+    visible = ~data.is_missing[:, i] & ~data.is_missing[:, j]
     if plot_input:
         censored = data.is_censored[:, i] | data.is_censored[:, j]
         # User keyword arguments override the defaults, including the colour, which
         # then also applies to the error bars and censoring marks.
         kw = {"s": 22, "zorder": 3, "color": color_input, **scatter_kwargs}
         color_input = kw["color"]
-        if np.any(~censored):
-            ax.scatter(x[~censored], y[~censored], label="data", **kw)
-        if np.any(censored):
+        if np.any(~censored & visible):
+            ax.scatter(x[~censored & visible], y[~censored & visible], label="data", **kw)
+        if np.any(censored & visible):
             kw_open = dict(kw)
             edge = kw_open.pop("color")
             kw_open.setdefault("facecolors", "none")
             kw_open.setdefault("edgecolors", edge)
-            ax.scatter(x[censored], y[censored], label="censored (limit)", **kw_open)
-        unc = data.is_uncertain[:, i] | data.is_uncertain[:, j]
+            ax.scatter(
+                x[censored & visible], y[censored & visible], label="censored (limit)", **kw_open
+            )
+        unc = (data.is_uncertain[:, i] | data.is_uncertain[:, j]) & visible
         if np.any(unc):
             xerr = np.vstack((data.sigma_lower[unc, i], data.sigma_upper[unc, i]))
             yerr = np.vstack((data.sigma_lower[unc, j], data.sigma_upper[unc, j]))
@@ -345,6 +349,28 @@ def _draw_panel(
             )
         if data.has_censoring:
             _draw_censoring(ax, data, i, j, color_input)
+        missing_x = data.is_missing[:, i] & ~data.is_missing[:, j]
+        missing_y = data.is_missing[:, j] & ~data.is_missing[:, i]
+        if np.any(missing_x):
+            ax.plot(
+                np.zeros(int(missing_x.sum())),
+                y[missing_x],
+                marker="_",
+                linestyle="none",
+                transform=ax.get_yaxis_transform(),
+                color=color_input,
+                label="missing x",
+            )
+        if np.any(missing_y):
+            ax.plot(
+                x[missing_y],
+                np.zeros(int(missing_y.sum())),
+                marker="|",
+                linestyle="none",
+                transform=ax.get_xaxis_transform(),
+                color=color_input,
+                label="missing y",
+            )
 
     if plot_fitted and info.has_latent and summ.vals_mean is not None:
         mean = summ.vals_mean
@@ -352,9 +378,14 @@ def _draw_panel(
         latent = data.is_latent[:, i] | data.is_latent[:, j]
         if np.any(latent):
             mx, my = mean[latent, i], mean[latent, j]
-            if plot_input:
+            connectors = latent & visible
+            if plot_input and np.any(connectors):
                 segs = np.stack(
-                    [np.column_stack((x[latent], y[latent])), np.column_stack((mx, my))], axis=1
+                    [
+                        np.column_stack((x[connectors], y[connectors])),
+                        np.column_stack((mean[connectors, i], mean[connectors, j])),
+                    ],
+                    axis=1,
                 )
                 ax.add_collection(
                     LineCollection(segs, colors="0.6", linewidths=0.6, alpha=0.8, zorder=1)
@@ -429,8 +460,9 @@ def plot_data(
     uncertain entries; censored entries are drawn as open markers with an arrow pointing
     in the direction of the allowed values (down for a *y* upper limit, up for a lower
     limit, left/right for *x*) or, for interval censoring, a dashed segment spanning the
-    interval. For latent models the posterior mean and standard deviation of the inferred
-    true values are overlaid and joined to the input points by thin grey lines. The
+    interval. Missing entries with one available coordinate appear as axis rugs.
+    For latent models the posterior mean and standard deviation of the inferred
+    true values are overlaid; connectors are drawn only for complete input pairs. The
     ellipse containing probability ``prob`` of the fitted Gaussian with the posterior
     mean ``mu`` and ``cov`` is shaded; for robust (Student-t) models this is the
     corresponding region of a Gaussian with the fitted scale matrix.

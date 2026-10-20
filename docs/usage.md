@@ -8,6 +8,7 @@ which parts of the model are switched on:
 | Input | Effect |
 | --- | --- |
 | `data` only | classic correlation on exact data |
+| `NaN` in `data` without a censoring bound | missing at random; inferred as a latent value (not appropriate for non-detections) |
 | `sigma=` | measurement uncertainties; `0`/`NaN` entries stay exact |
 | `sigma_lower=`, `sigma_upper=` | asymmetric (two-piece Normal) uncertainties; exclusive with `sigma` |
 | `censoring=` or `lower=`/`upper=` | per-entry censoring (upper limit, lower limit, interval) |
@@ -25,7 +26,7 @@ bc = pbc.BayesianCorrelation(
 print(bc.describe())
 ```
 
-`describe()` lists how many entries of each variable are uncertain, asymmetric or
+`describe()` lists how many entries of each variable are missing, uncertain, asymmetric or
 censored, and which model structure will be used.
 
 ## Fitting
@@ -44,7 +45,7 @@ The result is an `xarray.DataTree` (also stored as `bc.trace`). Trace variables:
 | `cov` | `feature, feature2` | covariance matrix |
 | `nu` | | Student-t degrees of freedom (`robust=True`) |
 | `error_scale` | `feature` | uncertainty scale factors (`error_scale=True`) |
-| `vals` | `point, feature` | inferred true values (models with uncertainties or censoring) |
+| `vals` | `point, feature` | inferred true values (including imputed missing-at-random entries, if present) |
 
 Other algorithms: `method="smc"`, `"fullrank_advi"`, `"advi"`, `"pathfinder"`,
 `"map"`. The NUTS back-ends `"numpyro"` and `"blackjax"` run through JAX and use a
