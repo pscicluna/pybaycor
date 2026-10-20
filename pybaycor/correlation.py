@@ -560,6 +560,7 @@ class BayesianCorrelation:
             sim = true + np.where(below, -noise * d.sigma_lower, noise * d.sigma_upper)
             # Keep the censoring pattern of the real data set.
             sim = np.where(d.is_censored, d.values, sim)
+            sim = np.where(d.is_missing, np.nan, sim)
             sim_data = CorrelationData(
                 sim,
                 sigma_lower=d.sigma_lower,
