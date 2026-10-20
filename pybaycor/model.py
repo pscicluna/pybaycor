@@ -210,8 +210,8 @@ def set_model_values(model: pm.Model, info: ModelInfo, data: CorrelationData) ->
     Only the *values* of the data may differ from those the model was built from: the
     uncertainties and the censoring (flags and limits) are compiled into the graph, so
     ``data`` must have identical ``sigma_lower``, ``sigma_upper``, ``censoring``,
-    ``lower``, ``upper`` and ``is_missing`` arrays, and a mismatch raises ``ValueError``. Used to refit
-    many simulated data sets without rebuilding and recompiling the model.
+    ``lower``, ``upper`` and ``is_missing`` arrays. A mismatch raises ``ValueError``.
+    Used to refit many simulated data sets without rebuilding and recompiling the model.
     """
     if not info.mutable_values or info.pattern is None:
         raise ValueError("The model was not built with mutable_values=True")
