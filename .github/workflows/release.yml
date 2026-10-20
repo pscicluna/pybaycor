@@ -1,0 +1,176 @@
+name: Release
+
+# Pushing a release tag publishes pybaycor. A final version (vX.Y.Z) goes to PyPI and
+# gets a GitHub Release, which Zenodo archives with a DOI. A pre-release (vX.Y.ZrcN, aN
+# or bN) goes to TestPyPI only: a dry run of the checks, the build, the wheel tests and
+# a trusted-publishing upload, but not of the PyPI environment, the GitHub Release or
+# Zenodo. Uploads use PyPI trusted publishing, so no API token is stored. See
+# RELEASING.md.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and check
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # hatch-vcs derives the version from the tag
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Classify the tag
+        id: tag
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            prerelease=false
+          elif [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(a|b|rc)[0-9]+$ ]]; then
+            prerelease=true
+          else
+            echo "::error::$tag is not a release tag (vX.Y.Z or vX.Y.Z{a,b,rc}N)"
+            exit 1
+          fi
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+      - name: Check the release metadata
+        # A pre-release checks the citation and changelog of its final version, so the
+        # dry run catches what the final release would trip over.
+        run: |
+          python scripts/sync_citation.py --check-release "$GITHUB_REF_NAME"
+          python scripts/release_notes.py "$GITHUB_REF_NAME" --check
+          python scripts/release_notes.py "$GITHUB_REF_NAME" > notes.md
+      - name: Build the sdist and wheel
+        # build makes the sdist first and the wheel from it, so a broken sdist fails here.
+        # The version is pinned to the tag: with several tags on one commit (an rc and
+        # the final release), hatch-vcs would otherwise pick by tag type and date.
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: ${{ steps.tag.outputs.version }}
+        run: pipx run build==1.6.1
+      - name: Check the distributions
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          pipx run twine==7.0.0 check --strict dist/*
+          ls dist/"pybaycor-${VERSION}.tar.gz" dist/"pybaycor-${VERSION}-py3-none-any.whl"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+      # Kept out of dist/, which the publish action uploads in full.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: notes.md
+          if-no-files-found: error
+
+  test-wheel:
+    name: Test the wheel (Python ${{ matrix.python-version }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Install the wheel with pip
+        # A plain pip install from PyPI dependencies, as users will do; the CI test
+        # matrix covers the conda-forge (pixi) environments.
+        run: |
+          rm -rf pybaycor  # make sure the tests import the installed wheel
+          python -m pip install --upgrade pip
+          python -m pip install dist/*.whl pytest
+      - name: Check the installed version
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          python - <<'EOF'
+          import os, pybaycor
+          assert "site-packages" in pybaycor.__file__, pybaycor.__file__
+          assert pybaycor.__version__ == os.environ["VERSION"], pybaycor.__version__
+          print(f"pybaycor {pybaycor.__version__} from {pybaycor.__file__}")
+          EOF
+      - name: Run the fast test suite
+        run: python -m pytest tests -m "not slow" -p no:cacheprovider
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    if: needs.build.outputs.prerelease == 'true'
+    needs: [build, test-wheel]
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/pybaycor/${{ needs.build.outputs.version }}/
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    name: Publish to PyPI
+    if: needs.build.outputs.prerelease == 'false'
+    needs: [build, test-wheel]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/pybaycor/${{ needs.build.outputs.version }}/
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: Create the GitHub Release
+    # Publishing the release is what triggers the Zenodo archive and DOI. Everything it
+    # needs was prepared before the upload, so little can fail after PyPI has the files.
+    needs: [build, publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}  # no checkout, so gh has no git remote
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --verify-tag --title "pybaycor $VERSION" --notes-file notes.md
