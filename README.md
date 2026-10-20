@@ -151,6 +151,15 @@ correlation exceeds zero, and `bf10`, the Savage-Dickey Bayes factor for a non-z
 correlation. A parametric-bootstrap p-value (refit under the null of no correlation,
 simulate, refit) is available through `bc.null_pvalue()`; it is expensive.
 
+## Example notebook
+
+[`examples/dustpedia_dust_scaling.ipynb`](examples/dustpedia_dust_scaling.ipynb)
+walks through the package on real data: the dust, stellar, gas and star-formation
+properties of nearby galaxies from DustPedia. It starts with two variables without
+uncertainties and builds up to a five-dimensional model with measurement errors, HI
+upper limits and missing HI data, then tests which correlations are significant. Run
+it with `pixi run -e examples examples`.
+
 ## Migrating from pybaycor 0.2
 
 * `RobustBayesianCorrelation`, `HierarchicalBayesianCorrelation` and
