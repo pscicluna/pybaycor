@@ -118,6 +118,16 @@ def twopiece_logp(x: Any, mu: Any, s_lo: Any, s_hi: Any) -> Any:
     The density is continuous at ``mu`` and integrates to one:
     ``f(x) = 2 / (s_lo + s_hi) * phi((x - mu) / s)`` with ``s = s_lo`` for ``x < mu`` and
     ``s = s_hi`` otherwise. It reduces to the Normal when ``s_lo == s_hi``.
+
+    Examples
+    --------
+    The arguments may be numbers or PyTensor variables; ``.eval()`` computes the result:
+
+    >>> import numpy as np
+    >>> from scipy import stats
+    >>> from pybaycor.model import twopiece_logp
+    >>> bool(np.isclose(twopiece_logp(0.3, 0.0, 1.0, 1.0).eval(), stats.norm.logpdf(0.3)))
+    True
     """
     s = pt.switch(pt.lt(x, mu), s_lo, s_hi)
     z = (x - mu) / s
@@ -287,7 +297,30 @@ def build_model(
     Returns
     -------
     model : pymc.Model
+        The model, ready for sampling.
     info : ModelInfo
+        How the model was built.
+
+    Examples
+    --------
+    Exact, uncensored data need no latent true values:
+
+    >>> import numpy as np
+    >>> from pybaycor import CorrelationData, build_model
+    >>> rng = np.random.default_rng(0)
+    >>> data = CorrelationData(rng.normal(size=(20, 2)))
+    >>> model, info = build_model(data)
+    >>> info.case, [rv.name for rv in model.free_RVs]
+    ('observed', ['mu_z', 'chol_z'])
+
+    Uncertainties on one variable and an upper limit on the other add latent values:
+
+    >>> data = CorrelationData.from_xy(
+    ...     [1.0, 2.0, 3.0, 4.0], [2.1, 3.9, 6.2, 8.1], y_err=0.2, x_censoring=[0, 0, 0, "upper"]
+    ... )
+    >>> model, info = build_model(data)
+    >>> info.case, info.has_latent
+    ('augmented', True)
     """
     hp = dict(DEFAULT_PRIORS)
     if priors:

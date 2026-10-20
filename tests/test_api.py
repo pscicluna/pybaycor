@@ -406,10 +406,14 @@ class TestFitArguments:
         with pytest.raises(ValueError, match="nuts_sampler must be one of"):
             BayesianCorrelation(xy).fit(nuts_sampler="stan")
 
-    @pytest.mark.parametrize("sampler", ["nutpie", "numpyro", "blackjax"])
-    def test_missing_sampler_raises_import_error(self, xy, monkeypatch, sampler):
+    @pytest.mark.parametrize(
+        ("sampler", "extra"), [("nutpie", "nutpie"), ("numpyro", "jax"), ("blackjax", "blackjax")]
+    )
+    def test_missing_sampler_raises_import_error(self, xy, monkeypatch, sampler, extra):
         monkeypatch.setattr(pbc.inference, "_importable", lambda name: False)
-        with pytest.raises(ImportError, match=f"nuts_sampler='{sampler}' requires"):
+        with pytest.raises(
+            ImportError, match=rf"nuts_sampler='{sampler}' requires.*pybaycor\[{extra}\]"
+        ):
             BayesianCorrelation(xy).fit(nuts_sampler=sampler)
 
     def test_missing_pathfinder_raises_import_error(self, xy, monkeypatch):
