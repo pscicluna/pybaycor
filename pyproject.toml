@@ -48,7 +48,7 @@ docs = ["sphinx>=7", "myst-parser", "sphinx-autoapi", "furo", "sphinx-copybutton
 
 [project.urls]
 Homepage = "https://github.com/pscicluna/pybaycor"
-Documentation = "https://pscicluna.github.io/pybaycor/"
+Documentation = "https://pybaycor.readthedocs.io/"
 "Bug Tracker" = "https://github.com/pscicluna/pybaycor/issues"
 
 # ---------------------------------------------------------------------------

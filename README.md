@@ -24,7 +24,7 @@ handles:
   correlation is positive and a Savage-Dickey Bayes factor against zero correlation.
 
 The full documentation, including the API reference, is at
-<https://pscicluna.github.io/pybaycor/>.
+<https://pybaycor.readthedocs.io/>.
 
 ## Installation
 

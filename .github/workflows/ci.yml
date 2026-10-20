@@ -10,8 +10,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Superseded PR runs are cancelled; runs on main finish so the docs deployment completes.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   lint:
@@ -58,31 +57,10 @@ jobs:
         with:
           environments: docs
           cache: true
-      - run: pixi run -e docs docs  # warnings are errors
+      # Warnings are errors. Read the Docs publishes the site (.readthedocs.yaml);
+      # this job keeps a broken docs build from merging.
+      - run: pixi run -e docs docs
       - uses: actions/upload-artifact@v4
         with:
           name: docs-html
           path: docs/_build/html
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs/_build/html
-
-  deploy-docs:
-    name: Deploy docs
-    # Publish to GitHub Pages only from the default branch; PRs just build the docs.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [lint, test, docs]
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    # Never cancel a deployment half-way; a newer push queues behind it instead.
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
