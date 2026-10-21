@@ -10,6 +10,7 @@ censored data, built on [PyMC](https://www.pymc.io) and
 
 installation
 usage
+examples/dustpedia_dust_scaling
 autoapi/index
 roadmap
 changelog

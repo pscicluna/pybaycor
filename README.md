@@ -51,7 +51,8 @@ development tasks need `-e dev` (or `-e full`), and the documentation `-e docs`.
 
 pybaycor requires Python ≥ 3.12. The package version comes from the git tags
 (`hatch-vcs`), and `pybaycor.__version__` reports the resolved version. Releases are
-published to PyPI by pushing a tag; see [RELEASING.md](RELEASING.md).
+published to PyPI by pushing a tag; see
+[RELEASING.md](https://github.com/pscicluna/pybaycor/blob/main/RELEASING.md).
 
 ## Quick start
 
@@ -157,7 +158,8 @@ simulate, refit) is available through `bc.null_pvalue()`; it is expensive.
 
 ## Example notebook
 
-[`examples/dustpedia_dust_scaling.ipynb`](examples/dustpedia_dust_scaling.ipynb)
+[`examples/dustpedia_dust_scaling.ipynb`](https://github.com/pscicluna/pybaycor/blob/main/examples/dustpedia_dust_scaling.ipynb)
+([rendered in the docs](https://pybaycor.readthedocs.io/en/latest/examples/dustpedia_dust_scaling.html))
 walks through the package on real data: the dust, stellar, gas and star-formation
 properties of nearby galaxies from DustPedia. It starts with two variables without
 uncertainties and builds up to a five-dimensional model with measurement errors, HI
