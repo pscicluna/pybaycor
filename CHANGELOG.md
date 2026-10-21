@@ -37,6 +37,11 @@ A ground-up modernisation. See `ROADMAP.md` for the analysis and the plan.
 
 ### Added
 
+- An example notebook, `examples/dustpedia_dust_scaling.ipynb`, that analyses dust
+  scaling relations of nearby DustPedia galaxies step by step, from a 2-D fit without
+  uncertainties to a 5-D fit with uncertainties, upper limits and missing data, and
+  demonstrates the significance tests. The `examples` pixi environment runs it
+  (`pixi run -e examples examples`).
 - A single `BayesianCorrelation` class covering every model: `robust=True` selects
   the multivariate Student-t; `sigma=` adds measurement uncertainties to any subset of
   entries (variables with and without uncertainties, and points with and without

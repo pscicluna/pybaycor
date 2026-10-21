@@ -167,6 +167,15 @@ sphinx-autoapi = "*"
 furo = "*"
 sphinx-copybutton = "*"
 
+[tool.pixi.feature.examples.dependencies]
+jupyterlab = "*"
+ipykernel = "*"
+nbconvert = "*"
+
+[tool.pixi.feature.examples.tasks]
+examples = "jupyter lab examples"
+run-examples = "jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb"
+
 [tool.pixi.feature.py312.dependencies]
 python = "3.12.*"
 
@@ -179,6 +188,7 @@ dev = { features = ["dev"], solve-group = "default" }
 jax = { features = ["jax", "dev"] }
 full = { features = ["jax", "nutpie", "dev"] }
 docs = { features = ["docs"] }
+examples = { features = ["examples", "nutpie"] }
 py312 = { features = ["py312", "dev"] }
 py313 = { features = ["py313", "dev"] }
 
