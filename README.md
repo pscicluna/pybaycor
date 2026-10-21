@@ -1,4 +1,9 @@
 # pybaycor
+
+[![PyPI](https://img.shields.io/pypi/v/pybaycor)](https://pypi.org/project/pybaycor/)
+[![Documentation](https://readthedocs.org/projects/pybaycor/badge/?version=stable)](https://pybaycor.readthedocs.io/en/stable/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23523929.svg)](https://doi.org/10.5281/zenodo.23523929)
+
 <sub><sup>*It's all you knead*</sup></sub>
 ---
 
@@ -189,6 +194,14 @@ $\mathbf R \sim \mathrm{LKJ}(\eta=2)$, $\nu \sim 1 + \mathrm{Exponential}(1/29)$
 Each observed entry is then either equal to its true value, a Normal (or two-piece
 Normal) measurement around it, or a censoring statement about it. See `ROADMAP.md`
 for the full description and the development plan.
+
+## Citing pybaycor
+
+If you use pybaycor in your research, please cite the software through its Zenodo
+DOI, [10.5281/zenodo.23523929](https://doi.org/10.5281/zenodo.23523929), which always
+resolves to the latest release; each release also has its own DOI on Zenodo.
+`CITATION.cff` has the details, and GitHub's "Cite this repository" button turns them
+into BibTeX or APA. Please also cite the papers below that describe the methods.
 
 ## Relevant citations
 
