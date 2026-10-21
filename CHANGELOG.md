@@ -4,9 +4,10 @@ All notable changes to pybaycor are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [0.3.0] - unreleased
+## [0.3.0] - 2026-10-21
 
-A ground-up modernisation. See `ROADMAP.md` for the analysis and the plan.
+A ground-up modernisation. See [ROADMAP.md](https://github.com/pscicluna/pybaycor/blob/main/ROADMAP.md)
+for the analysis and the plan.
 
 ### Changed (breaking)
 
