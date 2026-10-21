@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.metadata
+import shutil
+from pathlib import Path
 
 project = "pybaycor"
 author = "Peter Scicluna"
@@ -15,7 +17,7 @@ except importlib.metadata.PackageNotFoundError:  # docs built without the packag
 version = ".".join(release.split(".")[:2])
 
 extensions = [
-    "myst_parser",
+    "myst_nb",
     "autoapi.extension",
     "sphinx.ext.napoleon",
     "sphinx.ext.mathjax",
@@ -31,6 +33,17 @@ suppress_warnings = ["ref.python"]
 # -- MyST --------------------------------------------------------------------
 myst_enable_extensions = ["dollarmath", "colon_fence"]
 myst_heading_anchors = 3
+
+# -- Example notebooks (MyST-NB) ---------------------------------------------
+# The notebooks live in examples/, outside the Sphinx source directory, so they are
+# copied into docs/examples/ (git-ignored) at build time. They are committed with
+# their outputs and are not re-executed: a full run takes several minutes of MCMC.
+nb_execution_mode = "off"
+_examples_src = Path(__file__).parent.parent / "examples"
+_examples_dst = Path(__file__).parent / "examples"
+_examples_dst.mkdir(exist_ok=True)
+for _notebook in _examples_src.glob("*.ipynb"):
+    shutil.copy2(_notebook, _examples_dst / _notebook.name)
 
 # -- AutoAPI -----------------------------------------------------------------
 autoapi_type = "python"
@@ -73,3 +86,14 @@ html_theme_options = {
 # -- sphinx-copybutton -------------------------------------------------------
 copybutton_prompt_text = r">>> |\.\.\. |\$ "
 copybutton_prompt_is_regexp = True
+
+
+def _link_examples_to_repository(app, pagename, templatename, context, doctree):
+    """Point the edit/view links of the copied notebooks at examples/ in the repository."""
+    if pagename.startswith("examples/"):
+        context["theme_source_directory"] = ""
+
+
+def setup(app):
+    """Register the page-context hook that fixes the example notebooks' source links."""
+    app.connect("html-page-context", _link_examples_to_repository)

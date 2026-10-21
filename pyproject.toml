@@ -44,7 +44,7 @@ all = [
   "pymc-extras>=0.2",
 ]
 dev = ["pytest>=8", "pytest-cov", "ruff>=0.6", "pre-commit", "mypy"]
-docs = ["sphinx>=7", "myst-parser", "sphinx-autoapi", "furo", "sphinx-copybutton"]
+docs = ["sphinx>=7", "myst-parser", "myst-nb", "sphinx-autoapi", "furo", "sphinx-copybutton"]
 
 [project.urls]
 Homepage = "https://github.com/pscicluna/pybaycor"
@@ -166,6 +166,7 @@ nutpie = ">=0.16.10"
 [tool.pixi.feature.docs.dependencies]
 sphinx = ">=7"
 myst-parser = "*"
+myst-nb = "*"
 sphinx-autoapi = "*"
 furo = "*"
 sphinx-copybutton = "*"
