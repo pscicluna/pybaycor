@@ -16,17 +16,20 @@ handles:
 * **censored data**: upper limits, lower limits and interval censoring, with a
   different limit for every point and every variable, with or without measurement
   error on the censored entries;
-* several inference engines on top of [PyMC](https://www.pymc.io) ≥ 6: NUTS through
+* several inference engines on top of [PyMC](https://www.pymc.io) ≥ 6.1: NUTS through
   `pymc`, `nutpie` (Rust) or `numpyro` (JAX, so GPU/TPU-capable; `blackjax` is wired up
   but currently blocked by an upstream PyMC incompatibility), as well as variational
   inference, sequential Monte Carlo, Pathfinder and MAP;
 * posterior summaries per pair of variables, including the probability that a
   correlation is positive and a Savage-Dickey Bayes factor against zero correlation.
 
+The full documentation, including the API reference, is at
+<https://pybaycor.readthedocs.io/>.
+
 ## Installation
 
 ```
-pip install pybaycor            # core (PyMC, ArviZ, numpy, scipy, matplotlib)
+pip install pybaycor            # core (PyMC, ArviZ, numpy, scipy, pandas, xarray, matplotlib)
 pip install pybaycor[nutpie]    # fastest CPU sampler
 pip install pybaycor[jax]       # numpyro sampler; install a GPU jaxlib to use a GPU
 pip install pybaycor[all]
@@ -37,11 +40,14 @@ To develop, or to get a fully reproducible environment, use [pixi](https://pixi.
 ```
 git clone https://github.com/pscicluna/pybaycor && cd pybaycor
 pixi install -e dev     # or -e full for the JAX and nutpie back-ends
-pixi run test           # fast unit tests
-pixi run test-all       # including MCMC recovery tests
-pixi run lint && pixi run fmt-check
-pixi run docs
+pixi run -e dev test    # fast unit tests and docstring examples
+pixi run -e dev test-all    # including MCMC recovery tests
+pixi run -e dev lint && pixi run -e dev fmt-check
+pixi run -e docs docs   # warnings are errors, as in CI
 ```
+
+The `default` pixi environment holds only the runtime dependencies, so the
+development tasks need `-e dev` (or `-e full`), and the documentation `-e docs`.
 
 pybaycor requires Python ≥ 3.12. The package version comes from the git tags
 (`hatch-vcs`): to release, tag the commit (`git tag v0.3.0 && git push --tags`) and
@@ -148,7 +154,8 @@ reported quantities are transformed back to data units.
 
 `correlation_summary()` reports `prob_positive`, the posterior probability that the
 correlation exceeds zero, and `bf10`, the Savage-Dickey Bayes factor for a non-zero
-correlation. A parametric-bootstrap p-value (refit under the null of no correlation,
+correlation. Its interval is ArviZ's default, an 89% equal-tailed interval; pass e.g.
+`correlation_summary(ci_prob=0.95, ci_kind="hdi")` for another. A parametric-bootstrap p-value (refit under the null of no correlation,
 simulate, refit) is available through `bc.null_pvalue()`; it is expensive.
 
 ## Example notebook

@@ -55,7 +55,16 @@ def _importable(name: str) -> bool:
 
 
 def available_nuts_samplers() -> list[str]:
-    """Return the NUTS back-ends that can be used in this environment."""
+    """Return the NUTS back-ends that can be used in this environment.
+
+    Examples
+    --------
+    PyMC's own sampler is always available; the others depend on what is installed:
+
+    >>> from pybaycor import available_nuts_samplers
+    >>> "pymc" in available_nuts_samplers()
+    True
+    """
     out = ["pymc"]
     for name in ("nutpie", "numpyro", "blackjax"):
         if _importable(name):
@@ -174,7 +183,7 @@ def fit_model(
         if nuts_sampler not in NUTS_SAMPLERS:
             raise ValueError(f"nuts_sampler must be one of {NUTS_SAMPLERS}; got {nuts_sampler!r}")
         if nuts_sampler != "pymc" and not _importable(nuts_sampler):
-            extra = "jax" if nuts_sampler in ("numpyro", "blackjax") else nuts_sampler
+            extra = "jax" if nuts_sampler == "numpyro" else nuts_sampler
             raise ImportError(
                 f"nuts_sampler={nuts_sampler!r} requires the '{nuts_sampler}' package; "
                 f"install pybaycor[{extra}]"

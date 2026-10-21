@@ -73,6 +73,9 @@ pixi.lock            reproducible multi-platform environments
 * Numpy-style docstrings on every public object, rendered by `sphinx-autoapi`.
 * MyST pages: installation, usage, roadmap (this file), changelog.
 * README rewritten around the unified API with migration notes.
+* CI builds the site with warnings as errors and runs the docstring examples as
+  doctests; Read the Docs publishes it (<https://pybaycor.readthedocs.io/>) from the locked pixi `docs`
+  environment, with `latest` following `main` and one version per release tag.
 
 ## 3. Statistical model
 
@@ -159,7 +162,7 @@ matter of installing the optional extra.
 | --- | --- |
 | #1 unit tests | `tests/test_data.py`, `tests/test_model.py`, `tests/test_stats.py`, `tests/test_api.py` |
 | #2 integration tests | `tests/test_inference.py` recovery tests (marked `slow`) incl. censoring and partial uncertainty |
-| #3 documentation | docstrings on all public objects, Sphinx/AutoAPI skeleton, rewritten README |
+| #3 documentation | docstrings (with doctested examples) on all public objects, Sphinx/AutoAPI site published on Read the Docs, rewritten README; worked examples and a model page still to come |
 | #4 plotting | `plotting.py` rewritten: any dimensionality, error bars, censoring arrows, posterior ellipses, corner plots of the correlation coefficients only, every function returns the figure and accepts `ax` |
 | #5 asymmetric errors | two-piece Normal observation channel (`sigma_lower=`/`sigma_upper=`) |
 | #6 p-values | `correlation_summary()` reports $P(\rho>0)$ and the Savage-Dickey Bayes factor for $\rho_{ij}=0$; the parametric-bootstrap p-value from the issue is provided by `null_pvalue()` and is documented as expensive |

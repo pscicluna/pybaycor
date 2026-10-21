@@ -57,6 +57,8 @@ jobs:
         with:
           environments: docs
           cache: true
+      # Warnings are errors. Read the Docs publishes the site (.readthedocs.yaml);
+      # this job keeps a broken docs build from merging.
       - run: pixi run -e docs docs
       - uses: actions/upload-artifact@v4
         with:

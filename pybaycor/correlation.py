@@ -100,6 +100,16 @@ class BayesianCorrelation:
     >>> rng = np.random.default_rng(0)
     >>> data = rng.multivariate_normal([0, 0], [[1, 0.6], [0.6, 1]], size=50)
     >>> bc = pbc.BayesianCorrelation(data, robust=True)
+    >>> bc
+    <BayesianCorrelation robust Student-t, 50 points x 2 variables, observed model, not fitted>
+    >>> print(bc.describe())
+    CorrelationData: 50 points x 2 variables
+      x0: 0 uncertain
+      x1: 0 uncertain
+    Model: observed, 0 latent values, robust (Student-t), standardised
+
+    Fitting runs the sampler, which takes a while:
+
     >>> idata = bc.fit(draws=500, tune=500)  # doctest: +SKIP
     >>> bc.correlation_summary()  # doctest: +SKIP
     """

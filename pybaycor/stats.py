@@ -54,6 +54,22 @@ def lkj_marginal_density(r: Any, eta: float, n_dim: int) -> np.ndarray:
         LKJ shape parameter.
     n_dim : int
         Dimension of the correlation matrix.
+
+    Returns
+    -------
+    ndarray
+        The prior density at each ``r``.
+
+    Examples
+    --------
+    For a 2 x 2 matrix, ``eta = 1`` gives a uniform prior on ``(-1, 1)``, while larger
+    ``eta`` favours values near zero:
+
+    >>> from pybaycor.stats import lkj_marginal_density
+    >>> lkj_marginal_density([-0.5, 0.0, 0.5], eta=1.0, n_dim=2)
+    array([0.5, 0.5, 0.5])
+    >>> lkj_marginal_density([-0.5, 0.0, 0.5], eta=2.0, n_dim=2)
+    array([0.5625, 0.75  , 0.5625])
     """
     a = eta - 1.0 + n_dim / 2.0
     r = np.asarray(r, dtype=float)
@@ -83,6 +99,22 @@ def bayes_factor(
         Hyper-parameters defining the LKJ prior (see :func:`lkj_marginal_density`).
     ref_val : float
         The null value.
+
+    Returns
+    -------
+    float
+        ``BF10``; ``nan`` if there are fewer than 10 samples or the density estimate
+        fails.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pybaycor import bayes_factor
+    >>> rng = np.random.default_rng(0)
+    >>> bayes_factor(rng.normal(0.6, 0.1, size=2000), eta=2.0, n_dim=2) > 100
+    True
+    >>> bayes_factor(rng.normal(0.0, 0.1, size=2000), eta=2.0, n_dim=2) < 1
+    True
     """
     samples = np.asarray(samples, dtype=float).ravel()
     if samples.size < 10:
@@ -113,7 +145,8 @@ def correlation_summary(
     idata : xarray.DataTree or xarray.Dataset
         Posterior containing ``chol_corr``.
     names : list of str, optional
-        Variable names (defaults to the ``variable`` coordinate of the posterior).
+        Variable names (defaults to the coordinate values of the first non-sample dimension
+        of ``chol_corr``, i.e. ``feature`` for pybaycor posteriors).
     eta : float
         LKJ shape used in the prior, needed for the Bayes factor.
     ci_prob : float, optional
@@ -124,7 +157,7 @@ def correlation_summary(
         Highest-density or equal-tailed interval; defaults to
         ``rcParams["stats.ci_kind"]`` ("eti" in ArviZ 1).
     ref_val : float
-        Null value for ``prob_greater`` and the Bayes factor.
+        Null value for ``prob_positive`` and the Bayes factor.
 
     Returns
     -------
@@ -133,6 +166,26 @@ def correlation_summary(
         ``sd``, the interval bounds, ``prob_positive`` (``P(rho > ref_val)``),
         ``bf10`` (Savage-Dickey Bayes factor for ``rho != ref_val``) and the raw
         indices ``i``, ``j``.
+
+    Examples
+    --------
+    A posterior is normally produced by :meth:`~pybaycor.BayesianCorrelation.fit`; here a
+    stand-in with correlation samples around 0.6 is built by hand:
+
+    >>> import numpy as np, xarray as xr
+    >>> from pybaycor import correlation_summary
+    >>> rng = np.random.default_rng(0)
+    >>> corr = np.ones((2, 500, 2, 2))  # (chain, draw, feature, feature2)
+    >>> corr[..., 0, 1] = corr[..., 1, 0] = rng.normal(0.6, 0.05, size=(2, 500))
+    >>> post = xr.Dataset(
+    ...     {"chol_corr": (("chain", "draw", "feature", "feature2"), corr)},
+    ...     coords={"feature": ["x", "y"], "feature2": ["x", "y"]},
+    ... )
+    >>> tab = correlation_summary(post, ci_prob=0.9, ci_kind="eti")
+    >>> list(tab.columns)
+    ['i', 'j', 'mean', 'median', 'sd', 'eti_5%', 'eti_95%', 'prob_positive', 'bf10']
+    >>> round(float(tab.loc["x~y", "mean"]), 1), float(tab.loc["x~y", "prob_positive"])
+    (0.6, 1.0)
     """
     import arviz as az
 

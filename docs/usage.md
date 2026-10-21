@@ -17,9 +17,9 @@ which parts of the model are switched on:
 | `priors=` | override hyper-parameters (`pybaycor.DEFAULT_PRIORS`) |
 
 ```python
-import numpy as np
 import pybaycor as pbc
 
+# data: (n_points, 3) array; sigma and censoring: arrays of the same shape
 bc = pbc.BayesianCorrelation(
     data, sigma=sigma, censoring=censoring, robust=True, names=["log L", "log M", "z"]
 )
@@ -32,8 +32,11 @@ censored, and which model structure will be used.
 ## Fitting
 
 ```python
-idata = bc.fit(draws=1000, tune=1000, chains=4, nuts_sampler="nutpie", random_seed=1)
+idata = bc.fit(draws=1000, tune=1000, chains=4, random_seed=1)
 ```
+
+NUTS is the default; it runs through `nutpie` when that is installed (`pybaycor[nutpie]`)
+and PyMC's own sampler otherwise. Pick one explicitly with `nuts_sampler=`.
 
 The result is an `xarray.DataTree` (also stored as `bc.trace`). Trace variables:
 
@@ -47,9 +50,17 @@ The result is an `xarray.DataTree` (also stored as `bc.trace`). Trace variables:
 | `error_scale` | `feature` | uncertainty scale factors (`error_scale=True`) |
 | `vals` | `point, feature` | inferred true values (including imputed missing-at-random entries, if present) |
 
-Other algorithms: `method="smc"`, `"fullrank_advi"`, `"advi"`, `"pathfinder"`,
-`"map"`. The NUTS back-ends `"numpyro"` and `"blackjax"` run through JAX and use a
-GPU or TPU when the installed `jaxlib` supports one.
+The posterior also holds the internal parameters the sampler works with (`mu_z`,
+`chol_z`, `nu_minus_one`, `theta_z`, `theta_free`, ...), in standardised units; use the
+variables above instead.
+
+Other algorithms: `method="smc"`, `"fullrank_advi"`, `"advi"` (mean-field; it
+under-estimates correlations, so use it only for exploration), `"pathfinder"` (needs
+`pybaycor[extras]`) and `"map"`. The NUTS back-end `"numpyro"` runs through JAX and
+uses a GPU or TPU when the installed `jaxlib` supports one. `"blackjax"` is wired up
+but currently fails because of an upstream PyMC incompatibility
+([#13](https://github.com/pscicluna/pybaycor/issues/13)); pybaycor then raises an
+error pointing to `numpyro` and `nutpie`.
 
 ## Summaries
 
@@ -61,6 +72,12 @@ bc.bayes_factor(0, 1)  # Savage-Dickey BF10 against rho = 0
 bc.inferred_values()  # posterior mean and sd of the true values
 bc.null_pvalue(0, 1, n_sim=100)  # parametric-bootstrap p-value (slow)
 ```
+
+`correlation_summary()` has one row per pair, indexed by `"name_i~name_j"`. Its
+interval follows ArviZ's defaults (`rcParams["stats.ci_prob"]` and
+`rcParams["stats.ci_kind"]`, an 89% equal-tailed interval in ArviZ 1), as does
+`summarise()`; pass e.g. `correlation_summary(ci_prob=0.95, ci_kind="hdi")` for
+another interval.
 
 ## Plots
 
@@ -91,7 +108,7 @@ observed, uncensored entries) and the priors below act in those units:
 
 ```python
 pbc.DEFAULT_PRIORS
-# {'mu': (0.0, 5.0), 'sigma': 2.5, 'eta': 2.0, 'nu_rate': 1/29, 'error_scale_sd': 0.5}
+# {'mu': (0.0, 5.0), 'sigma': 2.5, 'eta': 2.0, 'nu_rate': 0.0344... (= 1/29), 'error_scale_sd': 0.5}
 ```
 
 `eta` is the LKJ shape (`1` = uniform over correlation matrices, larger values shrink

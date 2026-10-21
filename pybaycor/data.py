@@ -155,6 +155,18 @@ class Standardisation:
         Location subtracted from each variable.
     scale : ndarray of shape (n_dim,)
         Scale each variable is divided by (strictly positive).
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pybaycor import Standardisation
+    >>> t = Standardisation(loc=np.array([1.0, 10.0]), scale=np.array([2.0, 5.0]))
+    >>> x = np.array([[3.0, 20.0], [1.0, 5.0]])
+    >>> t.forward(x)
+    array([[ 1.,  2.],
+           [ 0., -1.]])
+    >>> np.allclose(t.inverse(t.forward(x)), x)
+    True
     """
 
     loc: NDArray[np.float64]
@@ -172,6 +184,15 @@ class Standardisation:
         The location is the median and the scale is ``1.4826 * MAD`` (falling back to
         the standard deviation, then to the typical uncertainty or censoring limit, then
         to 1) so that outliers do not dominate the standardisation.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from pybaycor import CorrelationData, Standardisation
+        >>> cd = CorrelationData(np.array([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0], [10.0, 40.0]]))
+        >>> t = Standardisation.from_data(cd)
+        >>> t.loc  # the median, unaffected by the outlying 10.0
+        array([ 2.5, 25. ])
         """
         loc = np.zeros(data.n_dim)
         scale = np.ones(data.n_dim)
@@ -501,7 +522,19 @@ class CorrelationData:
 
     # ------------------------------------------------------------------ helpers
     def describe(self) -> str:
-        """Return a short human-readable description of the data set."""
+        """Return a short human-readable description of the data set.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from pybaycor import CorrelationData
+        >>> x = np.array([[1.0, 2.0], [2.0, 3.5], [0.5, 1.0]])
+        >>> cd = CorrelationData(x, sigma=[0.1, 0.0], censoring=[[0, 0], [0, 0], ["upper", 0]])
+        >>> print(cd.describe())
+        CorrelationData: 3 points x 2 variables
+          x0: 3 uncertain, 1 upper limits
+          x1: 0 uncertain
+        """
         lines = [f"CorrelationData: {self.n_points} points x {self.n_dim} variables"]
         for j, name in enumerate(self.names):
             unc = int(self.is_uncertain[:, j].sum())
@@ -569,6 +602,26 @@ class CorrelationData:
             Per-point censoring flags (see :class:`CorrelationData`).
         names : list of str, optional
             Variable names; defaults to ``["x", "y"]``.
+
+        Returns
+        -------
+        CorrelationData
+            The data set, with shape ``(n_points, 2)``.
+
+        Examples
+        --------
+        >>> from pybaycor import CorrelationData
+        >>> cd = CorrelationData.from_xy(
+        ...     [1.0, 2.0, 3.0, 4.0],
+        ...     [2.1, 3.9, 6.2, 8.1],
+        ...     y_err=0.2,
+        ...     x_censoring=[0, 0, 0, "upper"],
+        ...     names=["mass", "lum"],
+        ... )
+        >>> cd.shape, cd.names
+        ((4, 2), ['mass', 'lum'])
+        >>> cd.n_censored, int(cd.is_uncertain.sum())
+        (1, 4)
         """
         x = np.asarray(x, dtype=float).ravel()
         y = np.asarray(y, dtype=float).ravel()

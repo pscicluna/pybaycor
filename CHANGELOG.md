@@ -74,9 +74,10 @@ A ground-up modernisation. See `ROADMAP.md` for the analysis and the plan.
   coefficients; trace plots ([#4](https://github.com/pscicluna/pybaycor/issues/4)).
 - Test suite (unit and integration, [#1](https://github.com/pscicluna/pybaycor/issues/1),
   [#2](https://github.com/pscicluna/pybaycor/issues/2)), Sphinx documentation
-  skeleton ([#3](https://github.com/pscicluna/pybaycor/issues/3)), `pyproject.toml`
-  with hatchling, pixi environments and lock file, ruff, pre-commit and GitHub
-  Actions CI.
+  ([#3](https://github.com/pscicluna/pybaycor/issues/3)) published on Read the Docs
+  (<https://pybaycor.readthedocs.io/>, one version per release), built with warnings
+  as errors and with the docstring examples run as doctests, `pyproject.toml` with
+  hatchling, pixi environments and lock file, ruff, pre-commit and GitHub Actions CI.
 
 ### Fixed
 
