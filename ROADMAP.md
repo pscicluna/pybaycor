@@ -179,8 +179,10 @@ Each item below is tracked as a GitHub issue so it can be picked up independentl
 2. **Missing data** ([#9](https://github.com/pscicluna/pybaycor/issues/9)): implemented on this branch (MAR latent imputation); see the issue map above.
 3. **Posterior predictive checks** ([#10](https://github.com/pscicluna/pybaycor/issues/10)): `plot_ppc` using ArviZ's `plot_ppc_*` family once
    the observed-data group is populated for the mixed exact/latent case.
-4. **Publishing** ([#11](https://github.com/pscicluna/pybaycor/issues/11)): enable the release workflow (trusted publishing to PyPI from a tag),
-   Zenodo DOI, and a conda-forge feedstock.
+4. **Publishing** ([#11](https://github.com/pscicluna/pybaycor/issues/11)): the release workflow (trusted publishing to PyPI from a
+   tag, TestPyPI for pre-release tags, GitHub Release for Zenodo) is in place, see
+   `RELEASING.md`; still to do are the first release with its Zenodo DOI and a
+   conda-forge feedstock.
 5. **Performance** ([#12](https://github.com/pscicluna/pybaycor/issues/12)): for very large `n_points` the per-entry latent parameters make the
    model high-dimensional; a marginalised (closed-form) likelihood for the Gaussian,
    uncensored, uncertain case ($x_i \sim \mathcal N(\mu, \Sigma + \mathrm{diag}(\sigma_i^2))$)

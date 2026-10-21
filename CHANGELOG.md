@@ -25,8 +25,8 @@ A ground-up modernisation. See `ROADMAP.md` for the analysis and the plan.
   asked, and save with `savefig` (the old code called the non-existent `plt.save`).
 - The package version is derived from git tags at build time (`hatch-vcs`); a
   tagged commit `vX.Y.Z` builds as `X.Y.Z`, later commits as `X.Y.(Z+1).devN+g<hash>`.
-  `CITATION.cff` follows the latest release tag (`scripts/sync_citation.py`, run by
-  CI on tag pushes and checked on every build).
+  `CITATION.cff` names the latest release, or the release being prepared
+  (`scripts/sync_citation.py`; CI fails if it falls behind the latest tag).
 - `seaborn` is no longer a dependency.
 - The module `pybaycor.pybaycor` is deprecated; import from `pybaycor`.
 - All constructor arguments after `data` (after `sigma` for the hierarchical classes)
@@ -78,6 +78,12 @@ A ground-up modernisation. See `ROADMAP.md` for the analysis and the plan.
   (<https://pybaycor.readthedocs.io/>, one version per release), built with warnings
   as errors and with the docstring examples run as doctests, `pyproject.toml` with
   hatchling, pixi environments and lock file, ruff, pre-commit and GitHub Actions CI.
+
+- Release workflow: pushing a `vX.Y.Z` tag builds and checks the sdist and wheel,
+  tests the wheel in a plain `pip` environment, publishes to PyPI through trusted
+  publishing and creates the GitHub Release for Zenodo; pre-release tags
+  (`vX.Y.ZrcN`) publish to TestPyPI as a dry run. The steps are in `RELEASING.md`
+  ([#11](https://github.com/pscicluna/pybaycor/issues/11)).
 
 ### Fixed
 

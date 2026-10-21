@@ -50,11 +50,8 @@ The `default` pixi environment holds only the runtime dependencies, so the
 development tasks need `-e dev` (or `-e full`), and the documentation `-e docs`.
 
 pybaycor requires Python ≥ 3.12. The package version comes from the git tags
-(`hatch-vcs`): to release, tag the commit (`git tag v0.3.0 && git push --tags`) and
-build; `pybaycor.__version__` reports the resolved version. `CITATION.cff` names the
-latest released tag: pushing a release tag updates it on the default branch through
-the `Sync CITATION.cff` workflow, `pixi run sync-citation` does the same locally, and
-CI fails if it drifts.
+(`hatch-vcs`), and `pybaycor.__version__` reports the resolved version. Releases are
+published to PyPI by pushing a tag; see [RELEASING.md](RELEASING.md).
 
 ## Quick start
 
